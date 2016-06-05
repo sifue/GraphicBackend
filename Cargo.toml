@@ -1,0 +1,8 @@
+[package]
+name = "graphic_backend"
+version = "0.1.0"
+authors = ["hsssnow23 <shsnow23@gmail.com>"]
+
+[dependencies]
+glutin = "*"
+gl = "*"
