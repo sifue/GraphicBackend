@@ -1,7 +1,7 @@
 
 use super::Event;
 
-pub trait Backend<B> {
+pub trait Backend<B, P: ProgramBackend> {
     fn init(&mut self);
     fn render(&self);
     fn get_events(&self) -> Vec<Event>;
@@ -11,8 +11,8 @@ pub trait Backend<B> {
                fssrc: &str,
                gssrc: Option<&str>,
                out: &str)
-               -> Result<Program<u32>, String>;
-    fn draw<V, U>(&self, vb: VertexBuffer<V, u32>, program: Program<B>, uniforms: U)
+               -> Result<Program<P>, String>;
+    fn draw<V, U>(&self, vb: VertexBuffer<V, u32>, program: Program<P>, uniforms: U)
         where V: VertexParams,
               U: Uniforms;
 }
@@ -31,8 +31,17 @@ pub enum ShaderParam {
     Texture2D(usize, usize, ColorFormat /* &[u8] */),
 }
 
-pub struct Program<B> {
-    pub binding: B,
+pub trait ProgramBackend {
+    type Backtype;
+    fn from_source(vssrc: &str,
+                   fssrc: &str,
+                   gssrc: Option<&str>,
+                   out: &str)
+                   -> Result<Self::Backtype, String>;
+}
+
+pub struct Program<P: ProgramBackend> {
+    pub backend: P,
 }
 
 pub struct VertexBuffer<V, B>

@@ -9,8 +9,9 @@ use std::mem;
 use std::ptr;
 use std::str;
 use std::ffi::CString;
+use std::ops::Drop;
 
-use super::{Backend, Program, Uniforms, VertexParams, VertexBuffer, Event};
+use super::{Backend, Program, ProgramBackend, Uniforms, VertexParams, VertexBuffer, Event};
 
 pub struct OpenGL {
     pub window: Window,
@@ -28,7 +29,8 @@ impl OpenGL {
     }
 }
 
-impl Backend<u32> for OpenGL {
+// TODO: implement Drop trait
+impl Backend<u32, GLProgram> for OpenGL {
     fn init(&mut self) {
         unsafe {
             self.window.make_current().unwrap();
@@ -79,28 +81,10 @@ impl Backend<u32> for OpenGL {
                fssrc: &str,
                gssrc: Option<&str>,
                out: &str)
-               -> Result<Program<u32>, String> {
-        let program = create_program();
-
-        let vs = try!(compile_shader(vssrc, gl::VERTEX_SHADER));
-        attach_shader(program, vs);
-        let fs = try!(compile_shader(fssrc, gl::FRAGMENT_SHADER));
-        attach_shader(program, fs);
-        match gssrc {
-            Some(s) => {
-                let gs = try!(compile_shader(s, gl::GEOMETRY_SHADER));
-                attach_shader(program, gs);
-            }
-            None => (),
-        }
-        try!(link_program(program));
-        unsafe {
-            gl::UseProgram(program);
-            gl::BindFragDataLocation(program, 0, CString::new(out).unwrap().as_ptr());
-        }
-        Ok(Program { binding: program })
+               -> Result<Program<GLProgram>, String> {
+        Ok(Program { backend: try!(GLProgram::from_source(vssrc, fssrc, gssrc, out)) })
     }
-    fn draw<V, U>(&self, vb: VertexBuffer<V, u32>, program: Program<u32>, uniforms: U)
+    fn draw<V, U>(&self, vb: VertexBuffer<V, u32>, program: Program<GLProgram>, uniforms: U)
         where V: VertexParams,
               U: Uniforms
     {
@@ -168,4 +152,60 @@ pub fn link_program(program: u32) -> Result<u32, String> {
         }
     }
     Ok(program)
+}
+
+pub struct GLProgram {
+    program: u32,
+    vs: u32,
+    fs: u32,
+    gs: Option<u32>,
+}
+
+impl ProgramBackend for GLProgram {
+    type Backtype = GLProgram;
+    fn from_source(vssrc: &str,
+                   fssrc: &str,
+                   gssrc: Option<&str>,
+                   out: &str)
+                   -> Result<GLProgram, String> {
+        let program = create_program();
+
+        let vs = try!(compile_shader(vssrc, gl::VERTEX_SHADER));
+        attach_shader(program, vs);
+        let fs = try!(compile_shader(fssrc, gl::FRAGMENT_SHADER));
+        attach_shader(program, fs);
+        let gs = match gssrc {
+            Some(s) => {
+                let gsres = try!(compile_shader(s, gl::GEOMETRY_SHADER));
+                attach_shader(program, gsres);
+                Some(gsres)
+            }
+            None => None,
+        };
+        try!(link_program(program));
+        unsafe {
+            gl::UseProgram(program);
+            gl::BindFragDataLocation(program, 0, CString::new(out).unwrap().as_ptr());
+        }
+        Ok(GLProgram {
+            program: program,
+            vs: vs,
+            fs: fs,
+            gs: gs,
+        })
+    }
+}
+
+impl Drop for GLProgram {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteProgram(self.program);
+            gl::DeleteShader(self.vs);
+            gl::DeleteShader(self.fs);
+            match self.gs {
+                Some(gs) => gl::DeleteShader(gs),
+                None => (),
+            }
+        }
+    }
 }
