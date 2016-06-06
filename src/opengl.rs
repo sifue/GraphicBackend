@@ -12,7 +12,7 @@ use std::ffi::CString;
 use std::ops::Drop;
 
 use super::{ContextBackend, Context, ProgramBackend, Program, VertexBufferBackend, VertexBuffer,
-            ShaderParam, ShaderParams, Event};
+            ShaderInput, input_size, ShaderInputs, Uniform, Uniforms, Event};
 
 pub struct OpenGL {
     pub window: Window,
@@ -31,8 +31,8 @@ impl OpenGL {
 }
 
 impl<V, U> ContextBackend<V, U> for OpenGL
-    where V: ShaderParams + 'static,
-          U: ShaderParams
+    where V: ShaderInputs + 'static,
+          U: Uniforms
 {
     fn init(&mut self) {
         unsafe {
@@ -63,8 +63,7 @@ impl<V, U> ContextBackend<V, U> for OpenGL
         Ok(Program { backend: Box::new(try!(GLProgram::from_source(vssrc, fssrc, gssrc, out))) })
     }
     fn draw(&self, vb: &VertexBuffer, program: &Program<U>, uniforms: &U) {
-        // program.set_inputs("", vb);
-        // gl::VertexAttribPointer()
+        program.draw(vb, uniforms);
     }
 }
 
@@ -171,13 +170,13 @@ impl GLProgram {
 }
 
 impl<U> ProgramBackend<U> for GLProgram
-    where U: ShaderParams
+    where U: Uniforms
 {
     fn draw(&self, vb: &VertexBuffer, uniforms: &U) {
         unsafe {
             gl::UseProgram(self.program);
         }
-        let names = uniforms.get_names();
+        let names = U::get_names();
         let params = uniforms.get_params();
         for (name, param) in names.iter().zip(params.iter()) {
             let loc: i32 = 0;
@@ -187,12 +186,16 @@ impl<U> ProgramBackend<U> for GLProgram
             set_uniform_value(loc, *param);
         }
 
+        let locations = Vec::new();
+        for name in vb.get_names().iter() {
+            locations.push(gl::GetAttribLocation(self.program, CString::new(*name).unwrap().as_ptr()));
+        }
         vb.draw();
     }
 }
 
-pub fn set_uniform_value(loc: i32, val: ShaderParam) {
-    use ShaderParam::*;
+pub fn set_uniform_value(loc: i32, val: Uniform) {
+    use Uniform::*;
     match val {
         Vec2(x, y) => unsafe {
             gl::Uniform2f(loc, x, y);
@@ -226,17 +229,18 @@ impl Drop for GLProgram {
 
 pub struct GLVertexBuffer<V> {
     buffer: Vec<V>,
+    buffers: Vec<Vec<ShaderInput>>,
     vbos: Vec<u32>,
 }
 
 impl<V> GLVertexBuffer<V>
-    where V: ShaderParams
+    where V: ShaderInputs
 {
     pub fn new(vertexes: Vec<V>) -> Result<GLVertexBuffer<V>, String> {
         let mut buffers = Vec::new();
         for vert in vertexes.iter() {
             buffers.push(Vec::new());
-            let params = vert.get_params();
+            let params = vert.get_inputs();
             for i in 0..params.len() {
                 buffers[i].push(params[i]);
             }
@@ -248,7 +252,7 @@ impl<V> GLVertexBuffer<V>
                 gl::GenBuffers(1, &mut vbo);
                 gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
                 gl::BufferData(gl::ARRAY_BUFFER,
-                               (buffer.len() * mem::size_of_val(&buffer[0])) as isize,
+                               (buffer.len() * input_size(&buffer[0])) as isize,
                                mem::transmute(&buffer[0]),
                                gl::STATIC_DRAW);
             }
@@ -256,6 +260,7 @@ impl<V> GLVertexBuffer<V>
         }
         Ok(GLVertexBuffer {
             buffer: vertexes,
+            buffers: buffers,
             vbos: vbos,
         })
     }
@@ -263,8 +268,11 @@ impl<V> GLVertexBuffer<V>
 
 // TODO: implement VertexBufferBackend draw for GLVertexBuffer
 impl<V> VertexBufferBackend for GLVertexBuffer<V>
-    where V: ShaderParams
+    where V: ShaderInputs
 {
+    fn get_names<'a>(&self) -> Vec<&'a str> {
+        V::get_names()
+    }
     fn draw(&self) {
         unimplemented!()
     }

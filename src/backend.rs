@@ -1,9 +1,11 @@
 
 use super::Event;
 
+use std::mem;
+
 pub trait ContextBackend<V, U>
-    where V: ShaderParams,
-          U: ShaderParams
+    where V: ShaderInputs,
+          U: Uniforms
 {
     fn init(&mut self);
     fn render(&self);
@@ -23,8 +25,8 @@ pub struct Context<'a, V, U> {
 }
 
 impl<'a, V, U> Context<'a, V, U>
-    where V: ShaderParams,
-          U: ShaderParams
+    where V: ShaderInputs,
+          U: Uniforms
 {
     pub fn new<B>(backend: B) -> Context<'a, V, U>
         where B: ContextBackend<V, U> + 'a
@@ -33,8 +35,11 @@ impl<'a, V, U> Context<'a, V, U>
     }
 }
 
+// TODO: BufferBackend
+pub trait BufferBackend {}
+
 pub trait ProgramBackend<U>
-    where U: ShaderParams
+    where U: Uniforms
 {
     fn draw(&self, vb: &VertexBuffer, uniforms: &U);
 }
@@ -45,6 +50,7 @@ pub struct Program<'a, U> {
 
 pub trait VertexBufferBackend {
     fn draw(&self);
+    fn get_names<'a>(&self) -> Vec<&'a str>;
 }
 
 pub struct VertexBuffer<'a> {
@@ -52,22 +58,44 @@ pub struct VertexBuffer<'a> {
 }
 
 impl<'a> VertexBuffer<'a> {
+    pub fn get_names(&self) -> Vec<&'a str> {
+        self.backend.get_names()
+    }
     pub fn draw(&self) {
         self.backend.draw();
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum ShaderParam {
+pub enum ShaderInput {
+    Vec2(f32, f32),
+    Vec3(f32, f32, f32),
+}
+
+pub fn input_size(input: &ShaderInput) -> usize {
+    use ShaderInput::*;
+    match input {
+        &Vec2(_, _) => 2 * mem::size_of::<f32>(),
+        &Vec3(_, _, _) => 3 * mem::size_of::<f32>(),
+    }
+}
+
+pub trait ShaderInputs {
+    fn get_names<'a>() -> Vec<&'a str>;
+    fn get_inputs(&self) -> Vec<ShaderInput>;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Uniform {
     Vec2(f32, f32),
     Vec3(f32, f32, f32),
     Matrix([[f32; 4]; 4]),
     Texture2D(usize, usize, ColorFormat /* &[u8] */),
 }
 
-pub trait ShaderParams {
-    fn get_params(&self) -> Vec<ShaderParam>;
-    fn get_names<'a>(&self) -> Vec<&'a str>;
+pub trait Uniforms {
+    fn get_names<'a>() -> Vec<&'a str>;
+    fn get_params(&self) -> Vec<Uniform>;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -88,8 +116,8 @@ macro_rules! impl_shader_param {
 
 macro_rules! impl_vertex_params {
     ($name:ty, $($field:ident),+) => (
-        impl VertexParams for $name {
-            fn get_params(&self) -> Vec<ShaderParam> {
+        impl ShaderInput for $name {
+            fn get_binds(&self) -> Vec<ShaderParam> {
                 vec![$(self.$field.into_param()),+]
             }
             fn get_names<'a>() -> Vec<&'a str> {
