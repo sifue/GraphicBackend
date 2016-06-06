@@ -2,8 +2,8 @@
 use super::Event;
 
 pub trait ContextBackend<V, U>
-    where V: VertexParams + Copy,
-          U: Uniforms
+    where V: ShaderParams,
+          U: ShaderParams
 {
     fn init(&mut self);
     fn render(&self);
@@ -15,9 +15,7 @@ pub trait ContextBackend<V, U>
                gssrc: Option<&str>,
                out: &str)
                -> Result<Program<U>, String>;
-    fn draw(&self, vb: &VertexBuffer, program: &Program<U>, uniforms: &U)
-        where V: VertexParams,
-              U: Uniforms;
+    fn draw(&self, vb: &VertexBuffer, program: &Program<U>, uniforms: &U);
 }
 
 pub struct Context<'a, V, U> {
@@ -25,8 +23,8 @@ pub struct Context<'a, V, U> {
 }
 
 impl<'a, V, U> Context<'a, V, U>
-    where V: VertexParams,
-          U: Uniforms
+    where V: ShaderParams,
+          U: ShaderParams
 {
     pub fn new<B>(backend: B) -> Context<'a, V, U>
         where B: ContextBackend<V, U> + 'a
@@ -36,7 +34,7 @@ impl<'a, V, U> Context<'a, V, U>
 }
 
 pub trait ProgramBackend<U>
-    where U: Uniforms
+    where U: ShaderParams
 {
     fn draw(&self, vb: &VertexBuffer, uniforms: &U);
 }
@@ -53,20 +51,10 @@ pub struct VertexBuffer<'a> {
     pub backend: Box<VertexBufferBackend + 'a>,
 }
 
-pub trait Uniforms {
-    fn get_uniforms(&self) -> Vec<ShaderParam>;
-    fn get_names<'a>() -> Vec<&'a str>;
-}
-
-pub trait VertexParams: Copy {
-    fn get_params(&self) -> Vec<ShaderParam>;
-    fn get_names<'a>() -> Vec<&'a str>;
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum ColorFormat {
-    RGB,
-    RGBA,
+impl<'a> VertexBuffer<'a> {
+    pub fn draw(&self) {
+        self.backend.draw();
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -75,6 +63,17 @@ pub enum ShaderParam {
     Vec3(f32, f32, f32),
     Matrix([[f32; 4]; 4]),
     Texture2D(usize, usize, ColorFormat /* &[u8] */),
+}
+
+pub trait ShaderParams {
+    fn get_params(&self) -> Vec<ShaderParam>;
+    fn get_names<'a>(&self) -> Vec<&'a str>;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ColorFormat {
+    RGB,
+    RGBA,
 }
 
 macro_rules! impl_shader_param {

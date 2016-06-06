@@ -12,7 +12,7 @@ use std::ffi::CString;
 use std::ops::Drop;
 
 use super::{ContextBackend, Context, ProgramBackend, Program, VertexBufferBackend, VertexBuffer,
-            Uniforms, VertexParams, Event};
+            ShaderParam, ShaderParams, Event};
 
 pub struct OpenGL {
     pub window: Window,
@@ -31,8 +31,8 @@ impl OpenGL {
 }
 
 impl<V, U> ContextBackend<V, U> for OpenGL
-    where V: VertexParams + Copy + 'static,
-          U: Uniforms
+    where V: ShaderParams + 'static,
+          U: ShaderParams
 {
     fn init(&mut self) {
         unsafe {
@@ -171,10 +171,42 @@ impl GLProgram {
 }
 
 impl<U> ProgramBackend<U> for GLProgram
-    where U: Uniforms
+    where U: ShaderParams
 {
     fn draw(&self, vb: &VertexBuffer, uniforms: &U) {
-        unimplemented!()
+        unsafe {
+            gl::UseProgram(self.program);
+        }
+        let names = uniforms.get_names();
+        let params = uniforms.get_params();
+        for (name, param) in names.iter().zip(params.iter()) {
+            let loc: i32 = 0;
+            unsafe {
+                gl::GetUniformLocation(self.program, CString::new(*name).unwrap().as_ptr());
+            }
+            set_uniform_value(loc, *param);
+        }
+
+        vb.draw();
+    }
+}
+
+pub fn set_uniform_value(loc: i32, val: ShaderParam) {
+    use ShaderParam::*;
+    match val {
+        Vec2(x, y) => unsafe {
+            gl::Uniform2f(loc, x, y);
+        },
+        Vec3(x, y, z) => unsafe {
+            gl::Uniform3f(loc, x, y, z);
+        },
+        Matrix(m) => unsafe {
+            gl::UniformMatrix4fv(loc, 1, gl::TRUE, mem::transmute(&m[0]));
+        },
+        _ => {
+            panic!("{:?}: this type is still not supported parameter type.",
+                   val)
+        }
     }
 }
 
@@ -198,7 +230,7 @@ pub struct GLVertexBuffer<V> {
 }
 
 impl<V> GLVertexBuffer<V>
-    where V: VertexParams
+    where V: ShaderParams
 {
     pub fn new(vertexes: Vec<V>) -> Result<GLVertexBuffer<V>, String> {
         let mut buffers = Vec::new();
@@ -229,10 +261,18 @@ impl<V> GLVertexBuffer<V>
     }
 }
 
+// TODO: implement VertexBufferBackend draw for GLVertexBuffer
 impl<V> VertexBufferBackend for GLVertexBuffer<V>
-    where V: VertexParams
+    where V: ShaderParams
 {
     fn draw(&self) {
+        unimplemented!()
+    }
+}
+
+// TODO: implement Drop for GLVertexBuffer
+impl<V> Drop for GLVertexBuffer<V> {
+    fn drop(&mut self) {
         unimplemented!()
     }
 }
