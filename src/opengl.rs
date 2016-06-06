@@ -1,9 +1,14 @@
 
-use std::mem;
-
 use gl;
+
 use glutin;
 use glutin::{Window, WindowBuilder, GlRequest, GlProfile, Api};
+
+use gl::types::*;
+use std::mem;
+use std::ptr;
+use std::str;
+use std::ffi::CString;
 
 use super::{Backend, Program, Uniforms, VertexParams, VertexBuffer, Event};
 
@@ -69,12 +74,98 @@ impl Backend<u32> for OpenGL {
             bindings: vbos,
         }
     }
-    fn draw<V, P, U>(&self, vb: VertexBuffer<V, u32>, program: P, uniforms: U)
+    fn program(&mut self,
+               vssrc: &str,
+               fssrc: &str,
+               gssrc: Option<&str>,
+               out: &str)
+               -> Result<Program<u32>, String> {
+        let program = create_program();
+
+        let vs = try!(compile_shader(vssrc, gl::VERTEX_SHADER));
+        attach_shader(program, vs);
+        let fs = try!(compile_shader(fssrc, gl::FRAGMENT_SHADER));
+        attach_shader(program, fs);
+        match gssrc {
+            Some(s) => {
+                let gs = try!(compile_shader(s, gl::GEOMETRY_SHADER));
+                attach_shader(program, gs);
+            }
+            None => (),
+        }
+        try!(link_program(program));
+        unsafe {
+            gl::UseProgram(program);
+            gl::BindFragDataLocation(program, 0, CString::new(out).unwrap().as_ptr());
+        }
+        Ok(Program { binding: program })
+    }
+    fn draw<V, U>(&self, vb: VertexBuffer<V, u32>, program: Program<u32>, uniforms: U)
         where V: VertexParams,
-              P: Program<u32>,
               U: Uniforms
     {
         // program.set_inputs("", vb);
         // gl::VertexAttribPointer()
     }
+}
+
+pub fn compile_shader(src: &str, ty: GLenum) -> Result<u32, String> {
+    let shader;
+    unsafe {
+        shader = gl::CreateShader(ty);
+        let c_str = CString::new(src.as_bytes()).unwrap();
+        gl::ShaderSource(shader, 1, &c_str.as_ptr(), ptr::null());
+        gl::CompileShader(shader);
+
+        let mut status = gl::FALSE as GLint;
+        gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut status);
+
+        if status != (gl::TRUE as GLint) {
+            let mut len = 0;
+            gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
+            let mut buf = Vec::with_capacity(len as usize);
+            buf.set_len((len as usize) - 1);
+            gl::GetShaderInfoLog(shader,
+                                 len,
+                                 ptr::null_mut(),
+                                 buf.as_mut_ptr() as *mut GLchar);
+            return Err(String::from(str::from_utf8(&buf)
+                .ok()
+                .expect("ShaderInfoLog not valid utf8")));
+        }
+    }
+    Ok(shader)
+}
+
+pub fn create_program() -> u32 {
+    unsafe { gl::CreateProgram() }
+}
+
+pub fn attach_shader(program: u32, shader: u32) {
+    unsafe {
+        gl::AttachShader(program, shader);
+    }
+}
+
+pub fn link_program(program: u32) -> Result<u32, String> {
+    unsafe {
+        gl::LinkProgram(program);
+        let mut status = gl::FALSE as GLint;
+        gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
+
+        if status != (gl::TRUE as GLint) {
+            let mut len: GLint = 0;
+            gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut len);
+            let mut buf = Vec::with_capacity(len as usize);
+            buf.set_len((len as usize) - 1);
+            gl::GetProgramInfoLog(program,
+                                  len,
+                                  ptr::null_mut(),
+                                  buf.as_mut_ptr() as *mut GLchar);
+            return Err(String::from(str::from_utf8(&buf)
+                .ok()
+                .expect("ProgramInfoLog not valid utf8")));
+        }
+    }
+    Ok(program)
 }

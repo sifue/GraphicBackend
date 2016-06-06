@@ -6,9 +6,14 @@ pub trait Backend<B> {
     fn render(&self);
     fn get_events(&self) -> Vec<Event>;
     fn vertex_buffer<V>(&mut self, vertexes: Vec<V>) -> VertexBuffer<V, B> where V: VertexParams;
-    fn draw<V, P, U>(&self, vb: VertexBuffer<V, u32>, program: P, uniforms: U)
+    fn program(&mut self,
+               vssrc: &str,
+               fssrc: &str,
+               gssrc: Option<&str>,
+               out: &str)
+               -> Result<Program<u32>, String>;
+    fn draw<V, U>(&self, vb: VertexBuffer<V, u32>, program: Program<B>, uniforms: U)
         where V: VertexParams,
-              P: Program<B>,
               U: Uniforms;
 }
 
@@ -26,9 +31,15 @@ pub enum ShaderParam {
     Texture2D(usize, usize, ColorFormat /* &[u8] */),
 }
 
-pub trait Program<B> {
-    fn set_inputs(&mut self, names: Vec<&str>, bindings: Vec<B>);
-    fn set_uniforms<U>(&mut self, uniforms: U) where U: Uniforms;
+pub struct Program<B> {
+    pub binding: B,
+}
+
+pub struct VertexBuffer<V, B>
+    where V: VertexParams + Copy
+{
+    pub buffer: Vec<V>,
+    pub bindings: Vec<B>,
 }
 
 pub trait Uniforms {
@@ -39,13 +50,6 @@ pub trait Uniforms {
 pub trait VertexParams: Copy {
     fn get_params(&self) -> Vec<ShaderParam>;
     fn get_names<'a>() -> Vec<&'a str>;
-}
-
-pub struct VertexBuffer<V, B>
-    where V: VertexParams + Copy
-{
-    pub buffer: Vec<V>,
-    pub bindings: Vec<B>,
 }
 
 macro_rules! impl_shader_param {
