@@ -11,7 +11,8 @@ use std::str;
 use std::ffi::CString;
 use std::ops::Drop;
 
-use super::{Backend, Program, ProgramBackend, Uniforms, VertexParams, VertexBuffer, Event};
+use super::{ContextBackend, Context, ProgramBackend, Program, VertexBufferBackend, VertexBuffer,
+            Uniforms, VertexParams, Event};
 
 pub struct OpenGL {
     pub window: Window,
@@ -29,8 +30,10 @@ impl OpenGL {
     }
 }
 
-// TODO: implement Drop trait
-impl Backend<u32, GLProgram> for OpenGL {
+impl<V, U> ContextBackend<V, U> for OpenGL
+    where V: VertexParams + Copy + 'static,
+          U: Uniforms
+{
     fn init(&mut self) {
         unsafe {
             self.window.make_current().unwrap();
@@ -47,47 +50,19 @@ impl Backend<u32, GLProgram> for OpenGL {
         }
         es
     }
-    fn vertex_buffer<V>(&mut self, vertexes: Vec<V>) -> VertexBuffer<V, u32>
-        where V: VertexParams
-    {
-        let mut buffers = Vec::new();
-        for vert in vertexes.iter() {
-            buffers.push(Vec::new());
-            let params = vert.get_params();
-            for i in 0..params.len() {
-                buffers[i].push(params[i]);
-            }
-        }
-        let mut vbos = Vec::new();
-        for buffer in buffers.iter() {
-            let mut vbo: u32 = 0;
-            unsafe {
-                gl::GenBuffers(1, &mut vbo);
-                gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-                gl::BufferData(gl::ARRAY_BUFFER,
-                               (buffer.len() * mem::size_of_val(&buffer[0])) as isize,
-                               mem::transmute(&buffer[0]),
-                               gl::STATIC_DRAW);
-            }
-            vbos.push(vbo);
-        }
-        VertexBuffer {
-            buffer: vertexes,
-            bindings: vbos,
-        }
+    fn vertex_buffer(&mut self, vertexes: Vec<V>) -> Result<VertexBuffer, String> {
+        let backend = try!(GLVertexBuffer::new(vertexes));
+        Ok(VertexBuffer { backend: Box::new(backend) })
     }
     fn program(&mut self,
                vssrc: &str,
                fssrc: &str,
                gssrc: Option<&str>,
                out: &str)
-               -> Result<Program<GLProgram>, String> {
-        Ok(Program { backend: try!(GLProgram::from_source(vssrc, fssrc, gssrc, out)) })
+               -> Result<Program<U>, String> {
+        Ok(Program { backend: Box::new(try!(GLProgram::from_source(vssrc, fssrc, gssrc, out))) })
     }
-    fn draw<V, U>(&self, vb: VertexBuffer<V, u32>, program: Program<GLProgram>, uniforms: U)
-        where V: VertexParams,
-              U: Uniforms
-    {
+    fn draw(&self, vb: &VertexBuffer, program: &Program<U>, uniforms: &U) {
         // program.set_inputs("", vb);
         // gl::VertexAttribPointer()
     }
@@ -161,8 +136,7 @@ pub struct GLProgram {
     gs: Option<u32>,
 }
 
-impl ProgramBackend for GLProgram {
-    type Backtype = GLProgram;
+impl GLProgram {
     fn from_source(vssrc: &str,
                    fssrc: &str,
                    gssrc: Option<&str>,
@@ -196,6 +170,14 @@ impl ProgramBackend for GLProgram {
     }
 }
 
+impl<U> ProgramBackend<U> for GLProgram
+    where U: Uniforms
+{
+    fn draw(&self, vb: &VertexBuffer, uniforms: &U) {
+        unimplemented!()
+    }
+}
+
 impl Drop for GLProgram {
     fn drop(&mut self) {
         unsafe {
@@ -207,5 +189,50 @@ impl Drop for GLProgram {
                 None => (),
             }
         }
+    }
+}
+
+pub struct GLVertexBuffer<V> {
+    buffer: Vec<V>,
+    vbos: Vec<u32>,
+}
+
+impl<V> GLVertexBuffer<V>
+    where V: VertexParams
+{
+    pub fn new(vertexes: Vec<V>) -> Result<GLVertexBuffer<V>, String> {
+        let mut buffers = Vec::new();
+        for vert in vertexes.iter() {
+            buffers.push(Vec::new());
+            let params = vert.get_params();
+            for i in 0..params.len() {
+                buffers[i].push(params[i]);
+            }
+        }
+        let mut vbos = Vec::new();
+        for buffer in buffers.iter() {
+            let mut vbo: u32 = 0;
+            unsafe {
+                gl::GenBuffers(1, &mut vbo);
+                gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+                gl::BufferData(gl::ARRAY_BUFFER,
+                               (buffer.len() * mem::size_of_val(&buffer[0])) as isize,
+                               mem::transmute(&buffer[0]),
+                               gl::STATIC_DRAW);
+            }
+            vbos.push(vbo);
+        }
+        Ok(GLVertexBuffer {
+            buffer: vertexes,
+            vbos: vbos,
+        })
+    }
+}
+
+impl<V> VertexBufferBackend for GLVertexBuffer<V>
+    where V: VertexParams
+{
+    fn draw(&self) {
+        unimplemented!()
     }
 }

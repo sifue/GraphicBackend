@@ -1,20 +1,66 @@
 
 use super::Event;
 
-pub trait Backend<B, P: ProgramBackend> {
+pub trait ContextBackend<V, U>
+    where V: VertexParams + Copy,
+          U: Uniforms
+{
     fn init(&mut self);
     fn render(&self);
     fn get_events(&self) -> Vec<Event>;
-    fn vertex_buffer<V>(&mut self, vertexes: Vec<V>) -> VertexBuffer<V, B> where V: VertexParams;
+    fn vertex_buffer(&mut self, vertexes: Vec<V>) -> Result<VertexBuffer, String>;
     fn program(&mut self,
                vssrc: &str,
                fssrc: &str,
                gssrc: Option<&str>,
                out: &str)
-               -> Result<Program<P>, String>;
-    fn draw<V, U>(&self, vb: VertexBuffer<V, u32>, program: Program<P>, uniforms: U)
+               -> Result<Program<U>, String>;
+    fn draw(&self, vb: &VertexBuffer, program: &Program<U>, uniforms: &U)
         where V: VertexParams,
               U: Uniforms;
+}
+
+pub struct Context<'a, V, U> {
+    pub backend: Box<ContextBackend<V, U> + 'a>,
+}
+
+impl<'a, V, U> Context<'a, V, U>
+    where V: VertexParams,
+          U: Uniforms
+{
+    pub fn new<B>(backend: B) -> Context<'a, V, U>
+        where B: ContextBackend<V, U> + 'a
+    {
+        Context { backend: Box::new(backend) }
+    }
+}
+
+pub trait ProgramBackend<U>
+    where U: Uniforms
+{
+    fn draw(&self, vb: &VertexBuffer, uniforms: &U);
+}
+
+pub struct Program<'a, U> {
+    pub backend: Box<ProgramBackend<U> + 'a>,
+}
+
+pub trait VertexBufferBackend {
+    fn draw(&self);
+}
+
+pub struct VertexBuffer<'a> {
+    pub backend: Box<VertexBufferBackend + 'a>,
+}
+
+pub trait Uniforms {
+    fn get_uniforms(&self) -> Vec<ShaderParam>;
+    fn get_names<'a>() -> Vec<&'a str>;
+}
+
+pub trait VertexParams: Copy {
+    fn get_params(&self) -> Vec<ShaderParam>;
+    fn get_names<'a>() -> Vec<&'a str>;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -29,36 +75,6 @@ pub enum ShaderParam {
     Vec3(f32, f32, f32),
     Matrix([[f32; 4]; 4]),
     Texture2D(usize, usize, ColorFormat /* &[u8] */),
-}
-
-pub trait ProgramBackend {
-    type Backtype;
-    fn from_source(vssrc: &str,
-                   fssrc: &str,
-                   gssrc: Option<&str>,
-                   out: &str)
-                   -> Result<Self::Backtype, String>;
-}
-
-pub struct Program<P: ProgramBackend> {
-    pub backend: P,
-}
-
-pub struct VertexBuffer<V, B>
-    where V: VertexParams + Copy
-{
-    pub buffer: Vec<V>,
-    pub bindings: Vec<B>,
-}
-
-pub trait Uniforms {
-    fn get_uniforms(&self) -> Vec<ShaderParam>;
-    fn get_names<'a>() -> Vec<&'a str>;
-}
-
-pub trait VertexParams: Copy {
-    fn get_params(&self) -> Vec<ShaderParam>;
-    fn get_names<'a>() -> Vec<&'a str>;
 }
 
 macro_rules! impl_shader_param {
