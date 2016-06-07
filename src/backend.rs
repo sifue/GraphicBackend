@@ -3,67 +3,30 @@ use super::Event;
 
 use std::mem;
 
-pub trait ContextBackend<V, U>
-    where V: ShaderInputs,
-          U: Uniforms
-{
+pub trait Context {
     fn init(&mut self);
     fn render(&self);
     fn get_events(&self) -> Vec<Event>;
-    fn vertex_buffer(&mut self, vertexes: Vec<V>) -> Result<VertexBuffer, String>;
-    fn program(&mut self,
-               vssrc: &str,
-               fssrc: &str,
-               gssrc: Option<&str>,
-               out: &str)
-               -> Result<Program<U>, String>;
-    fn draw(&self, vb: &VertexBuffer, program: &Program<U>, uniforms: &U);
 }
 
-pub struct Context<'a, V, U> {
-    pub backend: Box<ContextBackend<V, U> + 'a>,
+pub trait Program {
+    type VertexBuffer: VertexBuffer;
+    fn draw(&self, vb: &Self::VertexBuffer);
 }
 
-impl<'a, V, U> Context<'a, V, U>
-    where V: ShaderInputs,
-          U: Uniforms
-{
-    pub fn new<B>(backend: B) -> Context<'a, V, U>
-        where B: ContextBackend<V, U> + 'a
-    {
-        Context { backend: Box::new(backend) }
+pub trait Buffer {
+    type Bind;
+    fn get_buffer(&self) -> &Vec<ShaderInput>;
+    fn get_bind(&self) -> Self::Bind;
+}
+
+pub trait VertexBuffer {
+    type Buffer: Buffer;
+    fn get_buffers(&self) -> &Vec<Self::Buffer>;
+    fn get_binds(&self) -> Vec<<<Self as VertexBuffer>::Buffer as Buffer>::Bind> {
+        self.get_buffers().iter().map(|b| b.get_bind()).collect()
     }
-}
-
-// TODO: BufferBackend
-pub trait BufferBackend {}
-
-pub trait ProgramBackend<U>
-    where U: Uniforms
-{
-    fn draw(&self, vb: &VertexBuffer, uniforms: &U);
-}
-
-pub struct Program<'a, U> {
-    pub backend: Box<ProgramBackend<U> + 'a>,
-}
-
-pub trait VertexBufferBackend {
-    fn draw(&self);
-    fn get_names<'a>(&self) -> Vec<&'a str>;
-}
-
-pub struct VertexBuffer<'a> {
-    pub backend: Box<VertexBufferBackend + 'a>,
-}
-
-impl<'a> VertexBuffer<'a> {
-    pub fn get_names(&self) -> Vec<&'a str> {
-        self.backend.get_names()
-    }
-    pub fn draw(&self) {
-        self.backend.draw();
-    }
+    fn get_names(&self) -> &Vec<String>;
 }
 
 #[derive(Clone, Copy, Debug)]
