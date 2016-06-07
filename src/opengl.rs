@@ -11,8 +11,8 @@ use std::str;
 use std::ffi::CString;
 use std::ops::Drop;
 
-use super::{Context, Program, Buffer, VertexBuffer, ShaderInput, input_size, ShaderInputs,
-            Uniform, Uniforms, Event};
+use super::{Context, Program, Buffer, VertexBuffer, DrawType, ShaderInput, input_size,
+            ShaderInputs, Uniform, Uniforms, Event};
 
 pub struct OpenGL {
     pub window: Window,
@@ -31,6 +31,8 @@ impl OpenGL {
 }
 
 impl Context for OpenGL {
+    type Program = GLProgram;
+    type VertexBuffer = GLVertexBuffer;
     fn init(&mut self) {
         unsafe {
             self.window.make_current().unwrap();
@@ -46,6 +48,20 @@ impl Context for OpenGL {
             es.push(e);
         }
         es
+    }
+    fn finish(&mut self) {
+        self.window.swap_buffers().unwrap();
+    }
+    fn program(&mut self,
+               vssrc: &str,
+               fssrc: &str,
+               gssrc: Option<&str>,
+               out: &str)
+               -> Result<GLProgram, String> {
+        GLProgram::from_source(vssrc, fssrc, gssrc, out)
+    }
+    fn vertex_buffer(&mut self) -> GLVertexBuffer {
+        GLVertexBuffer::new()
     }
 }
 
@@ -153,9 +169,12 @@ impl GLProgram {
 
 impl Program for GLProgram {
     type VertexBuffer = GLVertexBuffer;
-    fn draw(&self, vb: &GLVertexBuffer) {
+    type Bind = u32;
+    fn draw(&self, draw_type: DrawType, vb: &GLVertexBuffer) {
         unsafe {
             gl::UseProgram(self.program);
+            gl::BindVertexArray(vb.get_bind());
+            gl::DrawArrays(draw_type_to_gl_type(draw_type), 0, 3);
         }
         // let names = U::get_names();
         // let params = uniforms.get_params();
@@ -166,12 +185,18 @@ impl Program for GLProgram {
         //     }
         //     set_uniform_value(loc, *param);
         // }
+    }
+    fn get_bind(&self) -> u32 {
+        self.program
+    }
+}
 
-        // let locations = Vec::new();
-        // for name in vb.get_names().iter() {
-        //     locations.push(gl::GetAttribLocation(self.program, CString::new(*name).unwrap().as_ptr()));
-        // }
-        // vb.draw();
+pub fn draw_type_to_gl_type(t: DrawType) -> GLenum {
+    use DrawType::*;
+    match t {
+        Triangles => gl::TRIANGLES,
+        TriangleStrip => gl::TRIANGLE_STRIP,
+        // _ => panic!("{:?}: this type is still not supported draw type.", t),
     }
 }
 
@@ -252,6 +277,7 @@ impl Drop for GLBuffer {
 pub struct GLVertexBuffer {
     names: Vec<String>,
     buffers: Vec<GLBuffer>,
+    vao: u32,
 }
 
 impl GLVertexBuffer {
@@ -259,21 +285,52 @@ impl GLVertexBuffer {
         GLVertexBuffer {
             names: Vec::new(),
             buffers: Vec::new(),
+            vao: 0,
         }
-    }
-    pub fn add_input(mut self, name: &str, input: Vec<ShaderInput>) -> GLVertexBuffer {
-        self.names.push(String::from(name));
-        self.buffers.push(GLBuffer::new(input));
-        self
     }
 }
 
 impl VertexBuffer for GLVertexBuffer {
     type Buffer = GLBuffer;
+    type Bind = u32;
+    type Program = GLProgram;
     fn get_buffers(&self) -> &Vec<GLBuffer> {
         &self.buffers
     }
     fn get_names(&self) -> &Vec<String> {
         &self.names
+    }
+    fn get_bind(&self) -> u32 {
+        self.vao
+    }
+    fn add_input(mut self, name: &str, input: Vec<ShaderInput>) -> GLVertexBuffer {
+        self.names.push(String::from(name));
+        self.buffers.push(GLBuffer::new(input));
+        self
+    }
+    fn build(mut self, program: &GLProgram) -> GLVertexBuffer {
+        let mut vao: u32 = 0;
+        unsafe {
+            gl::GenVertexArrays(1, &mut vao);
+            gl::BindVertexArray(vao);
+            for (name, buffer) in self.names.iter().zip(self.get_buffers()) {
+                gl::BindBuffer(gl::ARRAY_BUFFER, buffer.get_bind());
+                let loc: u32 =
+                    gl::GetAttribLocation(program.get_bind(),
+                                          CString::new(name.clone().into_bytes())
+                                              .unwrap()
+                                              .as_ptr()) as u32;
+
+                gl::VertexAttribPointer(loc,
+                                        buffer.get_elem_size() as i32,
+                                        gl::FLOAT,
+                                        gl::FALSE,
+                                        0,
+                                        ptr::null());
+                gl::EnableVertexAttribArray(loc);
+            }
+        }
+        self.vao = vao;
+        self
     }
 }

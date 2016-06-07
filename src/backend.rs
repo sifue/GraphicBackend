@@ -4,32 +4,58 @@ use super::Event;
 use std::mem;
 
 pub trait Context {
+    type Program;
+    type VertexBuffer;
     fn init(&mut self);
     fn render(&self);
     fn get_events(&self) -> Vec<Event>;
+    fn finish(&mut self);
+    fn program(&mut self,
+               vssrc: &str,
+               fssrc: &str,
+               gssrc: Option<&str>,
+               out: &str)
+               -> Result<Self::Program, String>;
+    fn vertex_buffer(&mut self) -> Self::VertexBuffer;
 }
 
 pub trait Program {
+    type Bind;
     type VertexBuffer: VertexBuffer;
-    fn draw(&self, vb: &Self::VertexBuffer);
+    fn draw(&self, draw_type: DrawType, vb: &Self::VertexBuffer);
+    fn get_bind(&self) -> Self::Bind;
 }
 
 pub trait Buffer {
     type Bind;
     fn get_buffer(&self) -> &Vec<ShaderInput>;
     fn get_bind(&self) -> Self::Bind;
+    fn get_elem_size(&self) -> usize {
+        input_size(&self.get_buffer()[0])
+    }
 }
 
 pub trait VertexBuffer {
     type Buffer: Buffer;
+    type Bind;
+    type Program: Program;
     fn get_buffers(&self) -> &Vec<Self::Buffer>;
     fn get_binds(&self) -> Vec<<<Self as VertexBuffer>::Buffer as Buffer>::Bind> {
         self.get_buffers().iter().map(|b| b.get_bind()).collect()
     }
     fn get_names(&self) -> &Vec<String>;
+    fn get_bind(&self) -> Self::Bind;
+    fn add_input(mut self, name: &str, input: Vec<ShaderInput>) -> Self;
+    fn build(mut self, program: &Self::Program) -> Self;
 }
 
 #[derive(Clone, Copy, Debug)]
+pub enum DrawType {
+    Triangles,
+    TriangleStrip,
+}
+
+#[derive(Clone, Debug)]
 pub enum ShaderInput {
     Vec2(f32, f32),
     Vec3(f32, f32, f32),
@@ -48,7 +74,7 @@ pub trait ShaderInputs {
     fn get_inputs(&self) -> Vec<ShaderInput>;
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Uniform {
     Vec2(f32, f32),
     Vec3(f32, f32, f32),
