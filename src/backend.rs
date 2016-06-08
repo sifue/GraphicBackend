@@ -28,10 +28,10 @@ pub trait Program {
 
 pub trait Buffer {
     type Bind;
-    fn get_buffer(&self) -> &Vec<ShaderInput>;
+    fn get_buffer(&self) -> &InputBuffer;
     fn get_bind(&self) -> Self::Bind;
-    fn get_elem_size(&self) -> usize {
-        self.get_buffer()[0].input_size()
+    fn elem_size(&self) -> usize {
+        self.get_buffer().elem_size()
     }
     fn len(&self) -> usize {
         self.get_buffer().len()
@@ -51,7 +51,7 @@ pub trait VertexBuffer {
     fn len(&self) -> usize {
         self.get_buffers()[0].len()
     }
-    fn add_input(mut self, name: &str, input: Vec<ShaderInput>) -> Self;
+    fn add_input(mut self, name: &str, input: InputBuffer) -> Self;
     fn build(mut self, program: &Self::Program) -> Self;
 }
 
@@ -61,26 +61,39 @@ pub enum DrawType {
     TriangleStrip,
 }
 
-// FIXME: change ShaderInput into static from dynamic
 #[derive(Clone, Debug)]
-pub enum ShaderInput {
-    Vec2([f32; 2]),
-    Vec3([f32; 3]),
+pub enum InputBuffer {
+    Vec2(Vec<f32>),
+    Vec3(Vec<f32>),
 }
 
-impl ShaderInput {
-    pub fn input_size(&self) -> usize {
-        use ShaderInput::*;
+impl InputBuffer {
+    pub fn len(&self) -> usize {
+        use InputBuffer::*;
+        match self {
+            &Vec2(ref v) => v.len() / 2,
+            &Vec3(ref v) => v.len() / 3,
+        }
+    }
+    pub fn elem_size(&self) -> usize {
+        use InputBuffer::*;
         match self {
             &Vec2(..) => 2 * mem::size_of::<f32>(),
             &Vec3(..) => 3 * mem::size_of::<f32>(),
         }
     }
-    pub fn into_raw(&self) -> &[f32] {
-        use ShaderInput::*;
+    pub fn buffer_size(&self) -> usize {
+        use InputBuffer::*;
         match self {
-            &Vec2(ref raw) => raw,
-            &Vec3(ref raw) => raw,
+            &Vec2(ref v) => v.len(),
+            &Vec3(ref v) => v.len(),
+        }
+    }
+    pub fn into_raw(&self) -> &[f32] {
+        use InputBuffer::*;
+        match self {
+            &Vec2(ref raw) => raw.as_slice(),
+            &Vec3(ref raw) => raw.as_slice(),
         }
     }
 }

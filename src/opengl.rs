@@ -11,7 +11,7 @@ use std::str;
 use std::ffi::CString;
 use std::ops::Drop;
 
-use super::{Context, Program, Buffer, VertexBuffer, DrawType, ShaderInput, Event};
+use super::{Context, Program, Buffer, VertexBuffer, DrawType, InputBuffer, Event};
 
 pub struct OpenGL {
     pub window: Window,
@@ -233,21 +233,20 @@ impl Drop for GLProgram {
 }
 
 pub struct GLBuffer {
-    buffer: Vec<ShaderInput>,
+    buffer: InputBuffer,
     bind: u32,
 }
 
 impl GLBuffer {
-    pub fn new(buffer: Vec<ShaderInput>) -> GLBuffer {
+    pub fn new(buffer: InputBuffer) -> GLBuffer {
         let mut bind: u32 = 0;
         unsafe {
             gl::GenBuffers(1, &mut bind);
             gl::BindBuffer(gl::ARRAY_BUFFER, bind);
             // FIXME: GLBuffer buffer slice
             gl::BufferData(gl::ARRAY_BUFFER,
-                           (buffer.len() * &buffer[0].input_size() *
-                            mem::size_of::<f32>()) as isize,
-                           mem::transmute(&buffer[0]),
+                           (buffer.len() * buffer.elem_size()) as isize,
+                           mem::transmute(&buffer.into_raw()[0]),
                            gl::STATIC_DRAW);
         }
         GLBuffer {
@@ -259,7 +258,7 @@ impl GLBuffer {
 
 impl Buffer for GLBuffer {
     type Bind = u32;
-    fn get_buffer(&self) -> &Vec<ShaderInput> {
+    fn get_buffer(&self) -> &InputBuffer {
         &self.buffer
     }
     fn get_bind(&self) -> u32 {
@@ -304,7 +303,7 @@ impl VertexBuffer for GLVertexBuffer {
     fn get_bind(&self) -> u32 {
         self.vao
     }
-    fn add_input(mut self, name: &str, input: Vec<ShaderInput>) -> GLVertexBuffer {
+    fn add_input(mut self, name: &str, input: InputBuffer) -> GLVertexBuffer {
         self.names.push(String::from(name));
         self.buffers.push(GLBuffer::new(input));
         self
@@ -323,7 +322,7 @@ impl VertexBuffer for GLVertexBuffer {
                                               .as_ptr()) as u32;
 
                 gl::VertexAttribPointer(loc,
-                                        buffer.get_elem_size() as i32,
+                                        buffer.elem_size() as i32,
                                         gl::FLOAT,
                                         gl::FALSE,
                                         0,
