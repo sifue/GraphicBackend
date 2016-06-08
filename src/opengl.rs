@@ -1,7 +1,6 @@
 
 use gl;
 
-use glutin;
 use glutin::{Window, WindowBuilder, GlRequest, GlProfile, Api};
 
 use gl::types::*;
@@ -19,25 +18,22 @@ pub struct OpenGL {
 
 impl OpenGL {
     pub fn new() -> OpenGL {
-        OpenGL {
-            window: WindowBuilder::new()
-                .with_gl(GlRequest::Specific(Api::OpenGl, (3, 2)))
-                .with_gl_profile(GlProfile::Core)
-                .build()
-                .unwrap(),
+        let window = WindowBuilder::new()
+            .with_gl(GlRequest::Specific(Api::OpenGl, (3, 2)))
+            .with_gl_profile(GlProfile::Core)
+            .build()
+            .unwrap();
+        unsafe {
+            window.make_current().unwrap();
+            gl::load_with(|s| window.get_proc_address(s) as *const _);
         }
+        OpenGL { window: window }
     }
 }
 
 impl Context for OpenGL {
     type Program = GLProgram;
     type VertexBuffer = GLVertexBuffer;
-    fn init(&mut self) {
-        unsafe {
-            self.window.make_current().unwrap();
-            gl::load_with(|s| self.window.get_proc_address(s) as *const _);
-        };
-    }
     fn get_events(&self) -> Vec<Event> {
         let mut es = Vec::new();
         for e in self.window.poll_events() {
@@ -243,9 +239,8 @@ impl GLBuffer {
         unsafe {
             gl::GenBuffers(1, &mut bind);
             gl::BindBuffer(gl::ARRAY_BUFFER, bind);
-            // FIXME: GLBuffer buffer slice
             gl::BufferData(gl::ARRAY_BUFFER,
-                           (buffer.len() * buffer.elem_size()) as isize,
+                           buffer.buffer_size() as isize,
                            mem::transmute(&buffer.into_raw()[0]),
                            gl::STATIC_DRAW);
         }

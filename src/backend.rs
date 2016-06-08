@@ -6,7 +6,6 @@ use std::mem;
 pub trait Context {
     type Program;
     type VertexBuffer;
-    fn init(&mut self);
     fn get_events(&self) -> Vec<Event>;
     fn finish(&mut self);
     fn program(&mut self,
@@ -16,6 +15,12 @@ pub trait Context {
                out: &str)
                -> Result<Self::Program, String>;
     fn vertex_buffer(&mut self) -> Self::VertexBuffer;
+    fn draw(&self, program: &Self::Program, draw_type: DrawType, vb: &Self::VertexBuffer);
+}
+
+pub trait Frame {
+    type Program;
+    type VertexBuffer;
     fn draw(&self, program: &Self::Program, draw_type: DrawType, vb: &Self::VertexBuffer);
 }
 
@@ -85,8 +90,8 @@ impl InputBuffer {
     pub fn buffer_size(&self) -> usize {
         use InputBuffer::*;
         match self {
-            &Vec2(ref v) => v.len(),
-            &Vec3(ref v) => v.len(),
+            &Vec2(ref v) => v.len() * mem::size_of::<f32>(),
+            &Vec3(ref v) => v.len() * mem::size_of::<f32>(),
         }
     }
     pub fn into_raw(&self) -> &[f32] {
@@ -122,28 +127,28 @@ impl InputBuffer {
 //     RGBA,
 // }
 
-macro_rules! impl_shader_param {
-    ($from:ty, $to:ident, $($field:ident),+) => (
-        impl $from {
-            pub fn into_param(&self) -> ShaderParam {
-                ShaderParam::$to($(self.$field),+)
-            }
-        }
-    );
-}
-
-macro_rules! impl_vertex_params {
-    ($name:ty, $($field:ident),+) => (
-        impl ShaderInput for $name {
-            fn get_binds(&self) -> Vec<ShaderParam> {
-                vec![$(self.$field.into_param()),+]
-            }
-            fn get_names<'a>() -> Vec<&'a str> {
-                vec![$(stringify!($field)),+]
-            }
-        }
-    );
-}
+// macro_rules! impl_shader_param {
+//     ($from:ty, $to:ident, $($field:ident),+) => (
+//         impl $from {
+//             pub fn into_param(&self) -> ShaderParam {
+//                 ShaderParam::$to($(self.$field),+)
+//             }
+//         }
+//     );
+// }
+//
+// macro_rules! impl_vertex_params {
+//     ($name:ty, $($field:ident),+) => (
+//         impl ShaderInput for $name {
+//             fn get_binds(&self) -> Vec<ShaderParam> {
+//                 vec![$(self.$field.into_param()),+]
+//             }
+//             fn get_names<'a>() -> Vec<&'a str> {
+//                 vec![$(stringify!($field)),+]
+//             }
+//         }
+//     );
+// }
 
 // pub struct Vertex {
 //     pos: Vector3f,
