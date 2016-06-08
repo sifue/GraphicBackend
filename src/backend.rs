@@ -7,7 +7,6 @@ pub trait Context {
     type Program;
     type VertexBuffer;
     fn init(&mut self);
-    fn render(&self);
     fn get_events(&self) -> Vec<Event>;
     fn finish(&mut self);
     fn program(&mut self,
@@ -17,6 +16,7 @@ pub trait Context {
                out: &str)
                -> Result<Self::Program, String>;
     fn vertex_buffer(&mut self) -> Self::VertexBuffer;
+    fn draw(&self, program: &Self::Program, draw_type: DrawType, vb: &Self::VertexBuffer);
 }
 
 pub trait Program {
@@ -31,7 +31,10 @@ pub trait Buffer {
     fn get_buffer(&self) -> &Vec<ShaderInput>;
     fn get_bind(&self) -> Self::Bind;
     fn get_elem_size(&self) -> usize {
-        input_size(&self.get_buffer()[0])
+        self.get_buffer()[0].input_size()
+    }
+    fn len(&self) -> usize {
+        self.get_buffer().len()
     }
 }
 
@@ -45,6 +48,9 @@ pub trait VertexBuffer {
     }
     fn get_names(&self) -> &Vec<String>;
     fn get_bind(&self) -> Self::Bind;
+    fn len(&self) -> usize {
+        self.get_buffers()[0].len()
+    }
     fn add_input(mut self, name: &str, input: Vec<ShaderInput>) -> Self;
     fn build(mut self, program: &Self::Program) -> Self;
 }
@@ -55,43 +61,53 @@ pub enum DrawType {
     TriangleStrip,
 }
 
+// FIXME: change ShaderInput into static from dynamic
 #[derive(Clone, Debug)]
 pub enum ShaderInput {
-    Vec2(f32, f32),
-    Vec3(f32, f32, f32),
+    Vec2([f32; 2]),
+    Vec3([f32; 3]),
 }
 
-pub fn input_size(input: &ShaderInput) -> usize {
-    use ShaderInput::*;
-    match input {
-        &Vec2(_, _) => 2 * mem::size_of::<f32>(),
-        &Vec3(_, _, _) => 3 * mem::size_of::<f32>(),
+impl ShaderInput {
+    pub fn input_size(&self) -> usize {
+        use ShaderInput::*;
+        match self {
+            &Vec2(..) => 2 * mem::size_of::<f32>(),
+            &Vec3(..) => 3 * mem::size_of::<f32>(),
+        }
+    }
+    pub fn into_raw(&self) -> &[f32] {
+        use ShaderInput::*;
+        match self {
+            &Vec2(ref raw) => raw,
+            &Vec3(ref raw) => raw,
+        }
     }
 }
 
-pub trait ShaderInputs {
-    fn get_names<'a>() -> Vec<&'a str>;
-    fn get_inputs(&self) -> Vec<ShaderInput>;
-}
-
-#[derive(Clone, Debug)]
-pub enum Uniform {
-    Vec2(f32, f32),
-    Vec3(f32, f32, f32),
-    Matrix([[f32; 4]; 4]),
-    Texture2D(usize, usize, ColorFormat /* &[u8] */),
-}
-
-pub trait Uniforms {
-    fn get_names<'a>() -> Vec<&'a str>;
-    fn get_params(&self) -> Vec<Uniform>;
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum ColorFormat {
-    RGB,
-    RGBA,
-}
+// pub trait ShaderInputs {
+//     fn get_names<'a>() -> Vec<&'a str>;
+//     fn get_inputs(&self) -> Vec<ShaderInput>;
+// }
+//
+// #[derive(Clone, Debug)]
+// pub enum Uniform {
+//     Vec2(f32, f32),
+//     Vec3(f32, f32, f32),
+//     Matrix([[f32; 4]; 4]),
+//     Texture2D(usize, usize, ColorFormat /* &[u8] */),
+// }
+//
+// pub trait Uniforms {
+//     fn get_names<'a>() -> Vec<&'a str>;
+//     fn get_params(&self) -> Vec<Uniform>;
+// }
+//
+// #[derive(Clone, Copy, Debug)]
+// pub enum ColorFormat {
+//     RGB,
+//     RGBA,
+// }
 
 macro_rules! impl_shader_param {
     ($from:ty, $to:ident, $($field:ident),+) => (

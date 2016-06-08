@@ -11,8 +11,7 @@ use std::str;
 use std::ffi::CString;
 use std::ops::Drop;
 
-use super::{Context, Program, Buffer, VertexBuffer, DrawType, ShaderInput, input_size,
-            ShaderInputs, Uniform, Uniforms, Event};
+use super::{Context, Program, Buffer, VertexBuffer, DrawType, ShaderInput, Event};
 
 pub struct OpenGL {
     pub window: Window,
@@ -39,9 +38,6 @@ impl Context for OpenGL {
             gl::load_with(|s| self.window.get_proc_address(s) as *const _);
         };
     }
-    fn render(&self) {
-        self.window.swap_buffers().unwrap();
-    }
     fn get_events(&self) -> Vec<Event> {
         let mut es = Vec::new();
         for e in self.window.poll_events() {
@@ -62,6 +58,9 @@ impl Context for OpenGL {
     }
     fn vertex_buffer(&mut self) -> GLVertexBuffer {
         GLVertexBuffer::new()
+    }
+    fn draw(&self, program: &GLProgram, draw_type: DrawType, vb: &GLVertexBuffer) {
+        program.draw(draw_type, vb);
     }
 }
 
@@ -174,7 +173,7 @@ impl Program for GLProgram {
         unsafe {
             gl::UseProgram(self.program);
             gl::BindVertexArray(vb.get_bind());
-            gl::DrawArrays(draw_type_to_gl_type(draw_type), 0, 3);
+            gl::DrawArrays(draw_type_to_gl_type(draw_type), 0, vb.len() as i32);
         }
         // let names = U::get_names();
         // let params = uniforms.get_params();
@@ -200,24 +199,24 @@ pub fn draw_type_to_gl_type(t: DrawType) -> GLenum {
     }
 }
 
-pub fn set_uniform_value(loc: i32, val: Uniform) {
-    use Uniform::*;
-    match val {
-        Vec2(x, y) => unsafe {
-            gl::Uniform2f(loc, x, y);
-        },
-        Vec3(x, y, z) => unsafe {
-            gl::Uniform3f(loc, x, y, z);
-        },
-        Matrix(m) => unsafe {
-            gl::UniformMatrix4fv(loc, 1, gl::TRUE, mem::transmute(&m[0]));
-        },
-        _ => {
-            panic!("{:?}: this type is still not supported parameter type.",
-                   val)
-        }
-    }
-}
+// pub fn set_uniform_value(loc: i32, val: Uniform) {
+//     use Uniform::*;
+//     match val {
+//         Vec2(x, y) => unsafe {
+//             gl::Uniform2f(loc, x, y);
+//         },
+//         Vec3(x, y, z) => unsafe {
+//             gl::Uniform3f(loc, x, y, z);
+//         },
+//         Matrix(m) => unsafe {
+//             gl::UniformMatrix4fv(loc, 1, gl::TRUE, mem::transmute(&m[0]));
+//         },
+//         _ => {
+//             panic!("{:?}: this type is still not supported parameter type.",
+//                    val)
+//         }
+//     }
+// }
 
 impl Drop for GLProgram {
     fn drop(&mut self) {
@@ -244,8 +243,10 @@ impl GLBuffer {
         unsafe {
             gl::GenBuffers(1, &mut bind);
             gl::BindBuffer(gl::ARRAY_BUFFER, bind);
+            // FIXME: GLBuffer buffer slice
             gl::BufferData(gl::ARRAY_BUFFER,
-                           (buffer.len() * input_size(&buffer[0])) as isize,
+                           (buffer.len() * &buffer[0].input_size() *
+                            mem::size_of::<f32>()) as isize,
                            mem::transmute(&buffer[0]),
                            gl::STATIC_DRAW);
         }

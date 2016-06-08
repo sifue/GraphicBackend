@@ -11,3 +11,4 @@ pub mod backend;
 pub use backend::*;
 
 pub mod opengl;
+pub use opengl::OpenGL;
