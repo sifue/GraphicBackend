@@ -4,8 +4,9 @@ use super::Event;
 use std::mem;
 
 pub trait Context {
-    type Program;
-    type VertexBuffer;
+    type Program: Program;
+    type VertexBuffer: VertexBuffer;
+    type VertexBufferBuilder;
     fn get_events(&self) -> Vec<Event>;
     fn finish(&mut self);
     fn program(&mut self,
@@ -14,9 +15,25 @@ pub trait Context {
                gssrc: Option<&str>,
                out: &str)
                -> Result<Self::Program, String>;
-    fn vertex_buffer(&mut self) -> Self::VertexBuffer;
+    fn vertex_buffer(&mut self) -> Self::VertexBufferBuilder;
     fn draw(&self, program: &Self::Program, draw_type: DrawType, vb: &Self::VertexBuffer);
 }
+
+// pub trait Context {
+//     type Program;
+//     type VertexBuffer;
+//     type Frame;
+//     fn get_events(&self) -> Vec<Event>;
+//     fn finish(&mut self);
+//     fn program(&mut self,
+//                vssrc: &str,
+//                fssrc: &str,
+//                gssrc: Option<&str>,
+//                out: &str)
+//                -> Result<Self::Program, String>;
+//     fn vertex_buffer(&mut self) -> Self::VertexBuffer;
+//     fn get_frame(&self) -> Self::Frame;
+// }
 
 pub trait Frame {
     type Program;
@@ -35,8 +52,8 @@ pub trait Buffer {
     type Bind;
     fn get_buffer(&self) -> &InputBuffer;
     fn get_bind(&self) -> Self::Bind;
-    fn elem_size(&self) -> usize {
-        self.get_buffer().elem_size()
+    fn elem_len(&self) -> usize {
+        self.get_buffer().elem_len()
     }
     fn len(&self) -> usize {
         self.get_buffer().len()
@@ -56,8 +73,6 @@ pub trait VertexBuffer {
     fn len(&self) -> usize {
         self.get_buffers()[0].len()
     }
-    fn add_input(mut self, name: &str, input: InputBuffer) -> Self;
-    fn build(mut self, program: &Self::Program) -> Self;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -80,11 +95,11 @@ impl InputBuffer {
             &Vec3(ref v) => v.len() / 3,
         }
     }
-    pub fn elem_size(&self) -> usize {
+    pub fn elem_len(&self) -> usize {
         use InputBuffer::*;
         match self {
-            &Vec2(..) => 2 * mem::size_of::<f32>(),
-            &Vec3(..) => 3 * mem::size_of::<f32>(),
+            &Vec2(..) => 2,
+            &Vec3(..) => 3,
         }
     }
     pub fn buffer_size(&self) -> usize {
@@ -94,7 +109,7 @@ impl InputBuffer {
             &Vec3(ref v) => v.len() * mem::size_of::<f32>(),
         }
     }
-    pub fn into_raw(&self) -> &[f32] {
+    pub fn as_slice(&self) -> &[f32] {
         use InputBuffer::*;
         match self {
             &Vec2(ref raw) => raw.as_slice(),

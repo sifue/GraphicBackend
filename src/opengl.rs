@@ -34,6 +34,7 @@ impl OpenGL {
 impl Context for OpenGL {
     type Program = GLProgram;
     type VertexBuffer = GLVertexBuffer;
+    type VertexBufferBuilder = GLVertexBufferBuilder;
     fn get_events(&self) -> Vec<Event> {
         let mut es = Vec::new();
         for e in self.window.poll_events() {
@@ -52,10 +53,13 @@ impl Context for OpenGL {
                -> Result<GLProgram, String> {
         GLProgram::from_source(vssrc, fssrc, gssrc, out)
     }
-    fn vertex_buffer(&mut self) -> GLVertexBuffer {
-        GLVertexBuffer::new()
+    fn vertex_buffer(&mut self) -> GLVertexBufferBuilder {
+        GLVertexBufferBuilder::new()
     }
     fn draw(&self, program: &GLProgram, draw_type: DrawType, vb: &GLVertexBuffer) {
+        unsafe {
+            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        }
         program.draw(draw_type, vb);
     }
 }
@@ -123,9 +127,6 @@ pub fn link_program(program: u32) -> Result<u32, String> {
 
 pub struct GLProgram {
     program: u32,
-    vs: u32,
-    fs: u32,
-    gs: Option<u32>,
 }
 
 impl GLProgram {
@@ -138,27 +139,33 @@ impl GLProgram {
 
         let vs = try!(compile_shader(vssrc, gl::VERTEX_SHADER));
         attach_shader(program, vs);
+        unsafe {
+            gl::DeleteShader(vs);
+        }
+
         let fs = try!(compile_shader(fssrc, gl::FRAGMENT_SHADER));
         attach_shader(program, fs);
-        let gs = match gssrc {
-            Some(s) => {
-                let gsres = try!(compile_shader(s, gl::GEOMETRY_SHADER));
-                attach_shader(program, gsres);
-                Some(gsres)
-            }
-            None => None,
-        };
-        try!(link_program(program));
         unsafe {
-            gl::UseProgram(program);
+            gl::DeleteShader(fs);
+        }
+
+        match gssrc {
+            Some(s) => {
+                let gs = try!(compile_shader(s, gl::GEOMETRY_SHADER));
+                attach_shader(program, gs);
+                unsafe { gl::DeleteShader(gs) }
+            }
+            None => (),
+        }
+
+        unsafe {
+            // gl::UseProgram(program);
             gl::BindFragDataLocation(program, 0, CString::new(out).unwrap().as_ptr());
         }
-        Ok(GLProgram {
-            program: program,
-            vs: vs,
-            fs: fs,
-            gs: gs,
-        })
+
+        try!(link_program(program));
+
+        Ok(GLProgram { program: program })
     }
 }
 
@@ -218,12 +225,6 @@ impl Drop for GLProgram {
     fn drop(&mut self) {
         unsafe {
             gl::DeleteProgram(self.program);
-            gl::DeleteShader(self.vs);
-            gl::DeleteShader(self.fs);
-            match self.gs {
-                Some(gs) => gl::DeleteShader(gs),
-                None => (),
-            }
         }
     }
 }
@@ -241,7 +242,7 @@ impl GLBuffer {
             gl::BindBuffer(gl::ARRAY_BUFFER, bind);
             gl::BufferData(gl::ARRAY_BUFFER,
                            buffer.buffer_size() as isize,
-                           mem::transmute(&buffer.into_raw()[0]),
+                           mem::transmute(&buffer.as_slice()[0]),
                            gl::STATIC_DRAW);
         }
         GLBuffer {
@@ -276,11 +277,11 @@ pub struct GLVertexBuffer {
 }
 
 impl GLVertexBuffer {
-    pub fn new() -> GLVertexBuffer {
+    pub fn new(names: Vec<String>, buffers: Vec<GLBuffer>, vao: u32) -> GLVertexBuffer {
         GLVertexBuffer {
-            names: Vec::new(),
-            buffers: Vec::new(),
-            vao: 0,
+            names: names,
+            buffers: buffers,
+            vao: vao,
         }
     }
 }
@@ -298,26 +299,40 @@ impl VertexBuffer for GLVertexBuffer {
     fn get_bind(&self) -> u32 {
         self.vao
     }
-    fn add_input(mut self, name: &str, input: InputBuffer) -> GLVertexBuffer {
+}
+
+pub struct GLVertexBufferBuilder {
+    names: Vec<String>,
+    buffers: Vec<GLBuffer>,
+}
+
+impl GLVertexBufferBuilder {
+    pub fn new() -> GLVertexBufferBuilder {
+        GLVertexBufferBuilder {
+            names: Vec::new(),
+            buffers: Vec::new(),
+        }
+    }
+    pub fn add_input(mut self, name: &str, input: InputBuffer) -> GLVertexBufferBuilder {
         self.names.push(String::from(name));
         self.buffers.push(GLBuffer::new(input));
         self
     }
-    fn build(mut self, program: &GLProgram) -> GLVertexBuffer {
+    pub fn build(self, program: &GLProgram) -> GLVertexBuffer {
         let mut vao: u32 = 0;
         unsafe {
             gl::GenVertexArrays(1, &mut vao);
             gl::BindVertexArray(vao);
-            for (name, buffer) in self.names.iter().zip(self.get_buffers()) {
+            for (name, buffer) in self.names.iter().zip(self.buffers.iter()) {
                 gl::BindBuffer(gl::ARRAY_BUFFER, buffer.get_bind());
                 let loc: u32 =
                     gl::GetAttribLocation(program.get_bind(),
-                                          CString::new(name.clone().into_bytes())
+                                          CString::new((&name).as_bytes())
                                               .unwrap()
                                               .as_ptr()) as u32;
 
                 gl::VertexAttribPointer(loc,
-                                        buffer.elem_size() as i32,
+                                        buffer.elem_len() as i32,
                                         gl::FLOAT,
                                         gl::FALSE,
                                         0,
@@ -325,7 +340,6 @@ impl VertexBuffer for GLVertexBuffer {
                 gl::EnableVertexAttribArray(loc);
             }
         }
-        self.vao = vao;
-        self
+        GLVertexBuffer::new(self.names, self.buffers, vao)
     }
 }
