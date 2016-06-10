@@ -7,6 +7,7 @@ pub use glutin::ElementState as KeyState;
 pub use glutin::Event;
 pub use glutin::MouseButton;
 
+#[macro_use]
 pub mod backend;
 pub use backend::*;
 

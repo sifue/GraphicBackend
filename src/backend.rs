@@ -6,7 +6,6 @@ use std::mem;
 pub trait Facade {
     type Frame: Frame;
     type Program: Program;
-    type VertexBuffer: VertexBuffer;
     type VertexBufferBuilder;
     fn program(&self,
                vssrc: &str,
@@ -16,6 +15,35 @@ pub trait Facade {
                -> Result<Self::Program, String>;
     fn vertex_buffer(&self) -> Self::VertexBufferBuilder;
     fn frame(&self) -> Self::Frame;
+}
+
+macro_rules! impl_facade {
+    ($name:ident, $selfcontext:ident, {
+        Context => $context:ident,
+        Frame => $frame:ident,
+        Program => $program:ident,
+        VertexBufferBuilder => $vbb:ident,
+    }) => (
+        impl Facade for $name {
+            type Frame = $frame;
+            type Program = $program;
+            type VertexBufferBuilder = $vbb;
+            fn program(&self,
+                       vssrc: &str,
+                       fssrc: &str,
+                       gssrc: Option<&str>,
+                       out: &str)
+                       -> Result<$program, String> {
+                $program::from_source(vssrc, fssrc, gssrc, out)
+            }
+            fn vertex_buffer(&self) -> $vbb {
+                $vbb::new()
+            }
+            fn frame(&self) -> GLFrame {
+                $frame::new(self.$selfcontext.clone())
+            }
+        }
+    );
 }
 
 pub trait Context {

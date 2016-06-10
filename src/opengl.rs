@@ -23,26 +23,12 @@ impl OpenGL {
     }
 }
 
-impl Facade for OpenGL {
-    type Frame = GLFrame;
-    type Program = GLProgram;
-    type VertexBuffer = GLVertexBuffer;
-    type VertexBufferBuilder = GLVertexBufferBuilder;
-    fn program(&self,
-               vssrc: &str,
-               fssrc: &str,
-               gssrc: Option<&str>,
-               out: &str)
-               -> Result<GLProgram, String> {
-        GLProgram::from_source(vssrc, fssrc, gssrc, out)
-    }
-    fn vertex_buffer(&self) -> GLVertexBufferBuilder {
-        GLVertexBufferBuilder::new()
-    }
-    fn frame(&self) -> GLFrame {
-        GLFrame::new(self.context.clone())
-    }
-}
+impl_facade!(OpenGL, context, {
+    Context => GLContext,
+    Frame => GLFrame,
+    Program => GLProgram,
+    VertexBufferBuilder => GLVertexBufferBuilder,
+});
 
 pub struct GLContext {
     pub window: Window,
