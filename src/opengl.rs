@@ -11,8 +11,8 @@ use std::ffi::CString;
 use std::ops::Drop;
 use std::rc::Rc;
 
-use super::{Facade, Context, Frame, Program, Buffer, VertexBuffer, DrawType, InputBuffer, Uniform,
-            Event};
+use super::backend::*;
+use super::event::*;
 
 pub struct OpenGL {
     context: Rc<GLContext>,
@@ -29,6 +29,7 @@ impl_facade!(OpenGL, context, {
     Frame => GLFrame,
     Program => GLProgram,
     VertexBufferBuilder => GLVertexBufferBuilder,
+    Texture2D => GLTexture2D,
 });
 
 pub struct GLContext {
@@ -76,11 +77,15 @@ impl GLFrame {
 impl Frame for GLFrame {
     type Program = GLProgram;
     type VertexBuffer = GLVertexBuffer;
-    fn draw(&mut self, program: &GLProgram, draw_type: DrawType, vb: &GLVertexBuffer) {
+    fn draw(&mut self,
+            program: &GLProgram,
+            draw_type: DrawType,
+            vb: &GLVertexBuffer,
+            uniforms: &Uniforms<u32>) {
         unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
-        program.draw(draw_type, vb);
+        program.draw(draw_type, vb, uniforms);
     }
     fn finish(self) {
         self.context.finish();
@@ -195,21 +200,22 @@ impl GLProgram {
 impl Program for GLProgram {
     type VertexBuffer = GLVertexBuffer;
     type Bind = u32;
-    fn draw(&self, draw_type: DrawType, vb: &GLVertexBuffer) {
+    fn draw(&self, draw_type: DrawType, vb: &GLVertexBuffer, uniforms: &Uniforms<u32>) {
         unsafe {
             gl::UseProgram(self.program);
             gl::BindVertexArray(vb.get_bind());
             gl::DrawArrays(draw_type_to_gl_type(draw_type), 0, vb.len() as i32);
         }
-        // let names = U::get_names();
-        // let params = uniforms.get_params();
-        // for (name, param) in names.iter().zip(params.iter()) {
-        //     let loc: i32 = 0;
-        //     unsafe {
-        //         gl::GetUniformLocation(self.program, CString::new(*name).unwrap().as_ptr());
-        //     }
-        //     set_uniform_value(loc, *param);
-        // }
+        let names = &uniforms.names;
+        let params = &uniforms.uniforms;
+        for (name, param) in names.iter().zip(params.iter()) {
+            let loc: i32 = 0;
+            unsafe {
+                gl::GetUniformLocation(self.program,
+                                       CString::new(name.clone().into_bytes()).unwrap().as_ptr());
+            }
+            set_uniform_value(loc, param);
+        }
     }
     fn get_bind(&self) -> u32 {
         self.program
@@ -225,22 +231,25 @@ pub fn draw_type_to_gl_type(t: DrawType) -> GLenum {
     }
 }
 
-pub fn set_uniform_value(loc: i32, val: Uniform) {
+pub fn set_uniform_value(loc: i32, val: &Uniform<u32>) {
     use Uniform::*;
     match val {
-        Vec2(x, y) => unsafe {
+        &Vec2(x, y) => unsafe {
             gl::Uniform2f(loc, x, y);
         },
-        Vec3(x, y, z) => unsafe {
+        &Vec3(x, y, z) => unsafe {
             gl::Uniform3f(loc, x, y, z);
         },
-        Matrix(m) => unsafe {
+        &Matrix(m) => unsafe {
             gl::UniformMatrix4fv(loc, 1, gl::TRUE, mem::transmute(&m[0]));
         },
-        _ => {
-            panic!("{:?}: this type is still not supported parameter type.",
-                   val);
-        }
+        &Texture2D(b) => unsafe {
+            gl::Uniform1i(loc, b as i32);
+        },
+        // _ => {
+        //     panic!("{:?}: this type is still not supported parameter type.",
+        //            val);
+        // }
     }
 }
 
@@ -364,5 +373,58 @@ impl GLVertexBufferBuilder {
             }
         }
         GLVertexBuffer::new(self.names, self.buffers, vao)
+    }
+}
+
+pub struct GLTexture2D {
+    format: ColorFormat,
+    width: u32,
+    height: u32,
+    buffer: Vec<u8>,
+    bind: u32,
+}
+
+pub fn color_format_to_gl_type(format: ColorFormat) -> GLenum {
+    use ColorFormat::*;
+    match format {
+        RGB => gl::RGB,
+        RGBA => gl::RGBA,
+    }
+}
+
+impl GLTexture2D {
+    pub fn new(format: ColorFormat, width: u32, height: u32, data: Vec<u8>) -> GLTexture2D {
+        let mut bind: u32 = 0;
+        unsafe {
+            gl::GenTextures(1, &mut bind);
+            gl::BindTexture(gl::TEXTURE_2D, bind);
+            gl::TexImage2D(gl::TEXTURE_2D,
+                           0,
+                           color_format_to_gl_type(format) as i32,
+                           width as i32,
+                           height as i32,
+                           0,
+                           color_format_to_gl_type(format),
+                           gl::UNSIGNED_BYTE,
+                           mem::transmute(&data.as_slice()[0]));
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
+        }
+        GLTexture2D {
+            format: format,
+            width: width,
+            height: height,
+            buffer: data,
+            bind: bind,
+        }
+    }
+}
+
+impl Texture2D for GLTexture2D {
+    type Bind = u32;
+    fn get_bind(&self) -> u32 {
+        self.bind
     }
 }

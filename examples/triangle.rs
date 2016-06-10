@@ -25,10 +25,11 @@ fn main() {
     let program = facade.program(VS_SRC, FS_SRC, None, "out_color").unwrap();
     let vertexes = Vec3(vec![-1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 1.0, -1.0, 0.0]);
     let vb = facade.vertex_buffer().add_input("position", vertexes).build(&program);
+    let uniforms = Uniforms::new();
 
     loop {
         let mut frame = facade.frame();
-        frame.draw(&program, DrawType::Triangles, &vb);
+        frame.draw(&program, DrawType::Triangles, &vb, &uniforms);
         frame.finish();
     }
 }

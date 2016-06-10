@@ -7,6 +7,7 @@ pub trait Facade {
     type Frame: Frame;
     type Program: Program;
     type VertexBufferBuilder;
+    type Texture2D: Texture2D;
     fn program(&self,
                vssrc: &str,
                fssrc: &str,
@@ -15,6 +16,12 @@ pub trait Facade {
                -> Result<Self::Program, String>;
     fn vertex_buffer(&self) -> Self::VertexBufferBuilder;
     fn frame(&self) -> Self::Frame;
+    fn texture2d(&self,
+                 format: ColorFormat,
+                 width: u32,
+                 height: u32,
+                 data: Vec<u8>)
+                 -> Self::Texture2D;
 }
 
 macro_rules! impl_facade {
@@ -23,11 +30,13 @@ macro_rules! impl_facade {
         Frame => $frame:ident,
         Program => $program:ident,
         VertexBufferBuilder => $vbb:ident,
+        Texture2D => $tex2d:ident,
     }) => (
         impl Facade for $name {
             type Frame = $frame;
             type Program = $program;
             type VertexBufferBuilder = $vbb;
+            type Texture2D = $tex2d;
             fn program(&self,
                        vssrc: &str,
                        fssrc: &str,
@@ -39,8 +48,11 @@ macro_rules! impl_facade {
             fn vertex_buffer(&self) -> $vbb {
                 $vbb::new()
             }
-            fn frame(&self) -> GLFrame {
+            fn frame(&self) -> $frame {
                 $frame::new(self.$selfcontext.clone())
+            }
+            fn texture2d(&self, format: ColorFormat, width: u32, height: u32, data: Vec<u8>) -> $tex2d {
+                $tex2d::new(format, width, height, data)
             }
         }
     );
@@ -54,14 +66,18 @@ pub trait Context {
 pub trait Frame {
     type Program;
     type VertexBuffer;
-    fn draw(&mut self, program: &Self::Program, draw_type: DrawType, vb: &Self::VertexBuffer);
+    fn draw(&mut self,
+            program: &Self::Program,
+            draw_type: DrawType,
+            vb: &Self::VertexBuffer,
+            uniforms: &Uniforms<u32>);
     fn finish(self);
 }
 
 pub trait Program {
     type Bind;
     type VertexBuffer: VertexBuffer;
-    fn draw(&self, draw_type: DrawType, vb: &Self::VertexBuffer);
+    fn draw(&self, draw_type: DrawType, vb: &Self::VertexBuffer, uniforms: &Uniforms<u32>);
     fn get_bind(&self) -> Self::Bind;
 }
 
@@ -152,11 +168,38 @@ impl ColorFormat {
 }
 
 #[derive(Clone, Debug)]
-pub enum Uniform {
+pub enum Uniform<T> {
     Vec2(f32, f32),
     Vec3(f32, f32, f32),
     Matrix([[f32; 4]; 4]),
-    Texture2D(ColorFormat, Vec<u8>),
+    Texture2D(T),
+}
+
+pub struct Uniforms<T> {
+    pub names: Vec<String>,
+    pub uniforms: Vec<Uniform<T>>,
+}
+
+impl<T> Uniforms<T> {
+    pub fn new() -> Uniforms<T> {
+        Uniforms {
+            names: Vec::new(),
+            uniforms: Vec::new(),
+        }
+    }
+    pub fn add_uniform(&mut self, name: &str, uniform: Uniform<T>) {
+        self.names.push(String::from(name));
+        self.uniforms.push(uniform);
+    }
+}
+
+pub trait Texture2D {
+    type Bind;
+    fn get_bind(&self) -> Self::Bind;
+    // FIXME: change as_uniform to textureid
+    fn as_uniform(&self) -> Uniform<Self::Bind> {
+        Uniform::Texture2D(self.get_bind())
+    }
 }
 
 // pub trait ShaderInputs {
