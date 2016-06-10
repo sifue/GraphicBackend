@@ -3,42 +3,31 @@ use super::Event;
 
 use std::mem;
 
-pub trait Context {
+pub trait Facade {
+    type Frame: Frame;
     type Program: Program;
     type VertexBuffer: VertexBuffer;
     type VertexBufferBuilder;
-    fn get_events(&self) -> Vec<Event>;
-    fn finish(&mut self);
-    fn program(&mut self,
+    fn program(&self,
                vssrc: &str,
                fssrc: &str,
                gssrc: Option<&str>,
                out: &str)
                -> Result<Self::Program, String>;
-    fn vertex_buffer(&mut self) -> Self::VertexBufferBuilder;
-    fn draw(&self, program: &Self::Program, draw_type: DrawType, vb: &Self::VertexBuffer);
+    fn vertex_buffer(&self) -> Self::VertexBufferBuilder;
+    fn frame(&self) -> Self::Frame;
 }
 
-// pub trait Context {
-//     type Program;
-//     type VertexBuffer;
-//     type Frame;
-//     fn get_events(&self) -> Vec<Event>;
-//     fn finish(&mut self);
-//     fn program(&mut self,
-//                vssrc: &str,
-//                fssrc: &str,
-//                gssrc: Option<&str>,
-//                out: &str)
-//                -> Result<Self::Program, String>;
-//     fn vertex_buffer(&mut self) -> Self::VertexBuffer;
-//     fn get_frame(&self) -> Self::Frame;
-// }
+pub trait Context {
+    fn get_events(&self) -> Vec<Event>;
+    fn finish(&self);
+}
 
 pub trait Frame {
     type Program;
     type VertexBuffer;
-    fn draw(&self, program: &Self::Program, draw_type: DrawType, vb: &Self::VertexBuffer);
+    fn draw(&mut self, program: &Self::Program, draw_type: DrawType, vb: &Self::VertexBuffer);
+    fn finish(self);
 }
 
 pub trait Program {

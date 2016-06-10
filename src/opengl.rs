@@ -9,15 +9,47 @@ use std::ptr;
 use std::str;
 use std::ffi::CString;
 use std::ops::Drop;
+use std::rc::Rc;
 
-use super::{Context, Program, Buffer, VertexBuffer, DrawType, InputBuffer, Event};
+use super::{Facade, Context, Frame, Program, Buffer, VertexBuffer, DrawType, InputBuffer, Event};
 
 pub struct OpenGL {
-    pub window: Window,
+    context: Rc<GLContext>,
 }
 
 impl OpenGL {
     pub fn new() -> OpenGL {
+        OpenGL { context: Rc::new(GLContext::new()) }
+    }
+}
+
+impl Facade for OpenGL {
+    type Frame = GLFrame;
+    type Program = GLProgram;
+    type VertexBuffer = GLVertexBuffer;
+    type VertexBufferBuilder = GLVertexBufferBuilder;
+    fn program(&self,
+               vssrc: &str,
+               fssrc: &str,
+               gssrc: Option<&str>,
+               out: &str)
+               -> Result<GLProgram, String> {
+        GLProgram::from_source(vssrc, fssrc, gssrc, out)
+    }
+    fn vertex_buffer(&self) -> GLVertexBufferBuilder {
+        GLVertexBufferBuilder::new()
+    }
+    fn frame(&self) -> GLFrame {
+        GLFrame::new(self.context.clone())
+    }
+}
+
+pub struct GLContext {
+    pub window: Window,
+}
+
+impl GLContext {
+    pub fn new() -> GLContext {
         let window = WindowBuilder::new()
             .with_gl(GlRequest::Specific(Api::OpenGl, (3, 2)))
             .with_gl_profile(GlProfile::Core)
@@ -27,14 +59,11 @@ impl OpenGL {
             window.make_current().unwrap();
             gl::load_with(|s| window.get_proc_address(s) as *const _);
         }
-        OpenGL { window: window }
+        GLContext { window: window }
     }
 }
 
-impl Context for OpenGL {
-    type Program = GLProgram;
-    type VertexBuffer = GLVertexBuffer;
-    type VertexBufferBuilder = GLVertexBufferBuilder;
+impl Context for GLContext {
     fn get_events(&self) -> Vec<Event> {
         let mut es = Vec::new();
         for e in self.window.poll_events() {
@@ -42,25 +71,32 @@ impl Context for OpenGL {
         }
         es
     }
-    fn finish(&mut self) {
+    fn finish(&self) {
         self.window.swap_buffers().unwrap();
     }
-    fn program(&mut self,
-               vssrc: &str,
-               fssrc: &str,
-               gssrc: Option<&str>,
-               out: &str)
-               -> Result<GLProgram, String> {
-        GLProgram::from_source(vssrc, fssrc, gssrc, out)
+}
+
+pub struct GLFrame {
+    context: Rc<GLContext>,
+}
+
+impl GLFrame {
+    pub fn new(context: Rc<GLContext>) -> GLFrame {
+        GLFrame { context: context }
     }
-    fn vertex_buffer(&mut self) -> GLVertexBufferBuilder {
-        GLVertexBufferBuilder::new()
-    }
-    fn draw(&self, program: &GLProgram, draw_type: DrawType, vb: &GLVertexBuffer) {
+}
+
+impl Frame for GLFrame {
+    type Program = GLProgram;
+    type VertexBuffer = GLVertexBuffer;
+    fn draw(&mut self, program: &GLProgram, draw_type: DrawType, vb: &GLVertexBuffer) {
         unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
         program.draw(draw_type, vb);
+    }
+    fn finish(self) {
+        self.context.finish();
     }
 }
 
