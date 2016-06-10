@@ -135,6 +135,30 @@ impl InputBuffer {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum ColorFormat {
+    RGB,
+    RGBA,
+}
+
+impl ColorFormat {
+    pub fn size(self) -> usize {
+        use ColorFormat::*;
+        match self {
+            RGB => 3,
+            RGBA => 4,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum Uniform {
+    Vec2(f32, f32),
+    Vec3(f32, f32, f32),
+    Matrix([[f32; 4]; 4]),
+    Texture2D(ColorFormat, Vec<u8>),
+}
+
 // pub trait ShaderInputs {
 //     fn get_names<'a>() -> Vec<&'a str>;
 //     fn get_inputs(&self) -> Vec<ShaderInput>;
@@ -153,11 +177,6 @@ impl InputBuffer {
 //     fn get_params(&self) -> Vec<Uniform>;
 // }
 //
-// #[derive(Clone, Copy, Debug)]
-// pub enum ColorFormat {
-//     RGB,
-//     RGBA,
-// }
 
 // macro_rules! impl_shader_param {
 //     ($from:ty, $to:ident, $($field:ident),+) => (

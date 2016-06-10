@@ -11,7 +11,8 @@ use std::ffi::CString;
 use std::ops::Drop;
 use std::rc::Rc;
 
-use super::{Facade, Context, Frame, Program, Buffer, VertexBuffer, DrawType, InputBuffer, Event};
+use super::{Facade, Context, Frame, Program, Buffer, VertexBuffer, DrawType, InputBuffer, Uniform,
+            Event};
 
 pub struct OpenGL {
     context: Rc<GLContext>,
@@ -224,24 +225,24 @@ pub fn draw_type_to_gl_type(t: DrawType) -> GLenum {
     }
 }
 
-// pub fn set_uniform_value(loc: i32, val: Uniform) {
-//     use Uniform::*;
-//     match val {
-//         Vec2(x, y) => unsafe {
-//             gl::Uniform2f(loc, x, y);
-//         },
-//         Vec3(x, y, z) => unsafe {
-//             gl::Uniform3f(loc, x, y, z);
-//         },
-//         Matrix(m) => unsafe {
-//             gl::UniformMatrix4fv(loc, 1, gl::TRUE, mem::transmute(&m[0]));
-//         },
-//         _ => {
-//             panic!("{:?}: this type is still not supported parameter type.",
-//                    val)
-//         }
-//     }
-// }
+pub fn set_uniform_value(loc: i32, val: Uniform) {
+    use Uniform::*;
+    match val {
+        Vec2(x, y) => unsafe {
+            gl::Uniform2f(loc, x, y);
+        },
+        Vec3(x, y, z) => unsafe {
+            gl::Uniform3f(loc, x, y, z);
+        },
+        Matrix(m) => unsafe {
+            gl::UniformMatrix4fv(loc, 1, gl::TRUE, mem::transmute(&m[0]));
+        },
+        _ => {
+            panic!("{:?}: this type is still not supported parameter type.",
+                   val);
+        }
+    }
+}
 
 impl Drop for GLProgram {
     fn drop(&mut self) {
