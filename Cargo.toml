@@ -6,3 +6,4 @@ authors = ["hsssnow23 <shsnow23@gmail.com>"]
 [dependencies]
 glutin = "*"
 gl = "*"
+image = "*"

@@ -245,7 +245,7 @@ pub fn set_uniform_value(loc: i32, val: &Uniform<u32>, texid: &mut u32) {
             gl::UniformMatrix4fv(loc, 1, gl::TRUE, mem::transmute(&m[0]));
         },
         &Texture2D(b) => unsafe {
-            gl::ActiveTexture(gl::TEXTURE0 + *texid);
+            gl::ActiveTexture(gl::TEXTURE0 + *texid); // u32 to i32 ?
             gl::BindTexture(gl::TEXTURE_2D, b);
             gl::Uniform1i(loc, *texid as i32);
             *texid += 1;
