@@ -208,13 +208,14 @@ impl Program for GLProgram {
         }
         let names = &uniforms.names;
         let params = &uniforms.uniforms;
+        let mut texid = 0;
         for (name, param) in names.iter().zip(params.iter()) {
             let loc: i32 = 0;
             unsafe {
                 gl::GetUniformLocation(self.program,
                                        CString::new(name.clone().into_bytes()).unwrap().as_ptr());
             }
-            set_uniform_value(loc, param);
+            set_uniform_value(loc, param, &mut texid);
         }
     }
     fn get_bind(&self) -> u32 {
@@ -231,7 +232,7 @@ pub fn draw_type_to_gl_type(t: DrawType) -> GLenum {
     }
 }
 
-pub fn set_uniform_value(loc: i32, val: &Uniform<u32>) {
+pub fn set_uniform_value(loc: i32, val: &Uniform<u32>, texid: &mut u32) {
     use Uniform::*;
     match val {
         &Vec2(x, y) => unsafe {
@@ -244,7 +245,10 @@ pub fn set_uniform_value(loc: i32, val: &Uniform<u32>) {
             gl::UniformMatrix4fv(loc, 1, gl::TRUE, mem::transmute(&m[0]));
         },
         &Texture2D(b) => unsafe {
-            gl::Uniform1i(loc, b as i32);
+            gl::ActiveTexture(gl::TEXTURE0 + *texid);
+            gl::BindTexture(gl::TEXTURE_2D, b);
+            gl::Uniform1i(loc, *texid as i32);
+            *texid += 1;
         },
         // _ => {
         //     panic!("{:?}: this type is still not supported parameter type.",

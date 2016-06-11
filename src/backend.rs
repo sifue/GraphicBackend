@@ -196,7 +196,6 @@ impl<T> Uniforms<T> {
 pub trait Texture2D {
     type Bind;
     fn get_bind(&self) -> Self::Bind;
-    // FIXME: change as_uniform to textureid
     fn as_uniform(&self) -> Uniform<Self::Bind> {
         Uniform::Texture2D(self.get_bind())
     }
