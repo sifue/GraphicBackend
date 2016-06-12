@@ -87,6 +87,11 @@ impl Frame for GLFrame {
         }
         program.draw(draw_type, vb, uniforms);
     }
+    fn clear_color(&self, r: f32, g: f32, b: f32, a: f32) {
+        unsafe {
+            gl::ClearColor(r, g, b, a);
+        }
+    }
     fn finish(self) {
         self.context.finish();
     }

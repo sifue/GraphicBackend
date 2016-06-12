@@ -1,4 +1,5 @@
 
+#[macro_use]
 extern crate graphic_backend;
 extern crate image;
 
@@ -40,12 +41,16 @@ fn main() {
         .add_input("position", vertexes)
         .add_input("coord", coords)
         .build(&program);
-    let mut uniforms = Uniforms::new();
+    // let mut uniforms = Uniforms::new();
 
     let img = image::open(&Path::new("resource/denim.png")).unwrap();
     let (width, height) = img.dimensions();
     let tex = facade.texture2d(ColorFormat::RGBA, width, height, img.to_rgba().into_raw());
-    uniforms.add_uniform("tex", tex.as_uniform());
+    // uniforms.add_uniform("tex", tex.as_uniform());
+
+    let uniforms = uniforms! {
+        tex: tex.as_uniform()
+    };
 
     loop {
         let mut frame = facade.frame();

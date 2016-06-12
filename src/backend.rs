@@ -71,6 +71,7 @@ pub trait Frame {
             draw_type: DrawType,
             vb: &Self::VertexBuffer,
             uniforms: &Uniforms<u32>);
+    fn clear_color(&self, r: f32, g: f32, b: f32, a: f32);
     fn finish(self);
 }
 
@@ -199,6 +200,17 @@ pub trait Texture2D {
     fn as_uniform(&self) -> Uniform<Self::Bind> {
         Uniform::Texture2D(self.get_bind())
     }
+}
+
+#[macro_export]
+macro_rules! uniforms {
+    ($($name:ident : $val:expr),*) => (
+        {
+            let mut uniforms = Uniforms::new();
+            $(uniforms.add_uniform(stringify!($name), $val);),*
+            uniforms
+        }
+    );
 }
 
 // pub trait ShaderInputs {
