@@ -3,6 +3,7 @@
 extern crate graphic_backend;
 extern crate image;
 
+use std::fs::File;
 use std::path::Path;
 use image::GenericImage;
 
@@ -32,7 +33,7 @@ static FS_SRC: &'static str = r#"
 fn main() {
     use graphic_backend::InputBuffer::*;
 
-    let facade = OpenGL::new();
+    let mut facade = OpenGL::new();
     let program = facade.program(VS_SRC, FS_SRC, None, "out_color").unwrap();
     let vertexes = Vec3(vec![-1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 1.0, -1.0, 0.0]);
     let coords = Vec2(vec![-1.0, -1.0, 0.0, 1.0, 1.0, -1.0]);
