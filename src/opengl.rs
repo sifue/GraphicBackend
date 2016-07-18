@@ -75,12 +75,10 @@ impl GLFrame {
 }
 
 impl Frame for GLFrame {
-    type Program = GLProgram;
-    type VertexBuffer = GLVertexBuffer;
     fn draw(&mut self,
-            program: &GLProgram,
+            program: &BProgram,
             draw_type: DrawType,
-            vb: &GLVertexBuffer,
+            vb: &BVertexBuffer,
             uniforms: &Uniforms<u32>) {
         unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
@@ -92,7 +90,7 @@ impl Frame for GLFrame {
             gl::ClearColor(r, g, b, a);
         }
     }
-    fn finish(self) {
+    fn finish(self: Box<Self>) {
         self.context.finish();
     }
 }
@@ -203,9 +201,7 @@ impl GLProgram {
 }
 
 impl Program for GLProgram {
-    type VertexBuffer = GLVertexBuffer;
-    type Bind = u32;
-    fn draw(&self, draw_type: DrawType, vb: &GLVertexBuffer, uniforms: &Uniforms<u32>) {
+    fn draw(&self, draw_type: DrawType, vb: &BVertexBuffer, uniforms: &Uniforms<u32>) {
         unsafe {
             gl::UseProgram(self.program);
             gl::BindVertexArray(vb.get_bind());
@@ -294,7 +290,6 @@ impl GLBuffer {
 }
 
 impl Buffer for GLBuffer {
-    type Bind = u32;
     fn get_buffer(&self) -> &InputBuffer {
         &self.buffer
     }
@@ -313,12 +308,12 @@ impl Drop for GLBuffer {
 
 pub struct GLVertexBuffer {
     names: Vec<String>,
-    buffers: Vec<GLBuffer>,
+    buffers: Vec<BBuffer>,
     vao: u32,
 }
 
 impl GLVertexBuffer {
-    pub fn new(names: Vec<String>, buffers: Vec<GLBuffer>, vao: u32) -> GLVertexBuffer {
+    pub fn new(names: Vec<String>, buffers: Vec<BBuffer>, vao: u32) -> GLVertexBuffer {
         GLVertexBuffer {
             names: names,
             buffers: buffers,
@@ -328,10 +323,7 @@ impl GLVertexBuffer {
 }
 
 impl VertexBuffer for GLVertexBuffer {
-    type Buffer = GLBuffer;
-    type Bind = u32;
-    type Program = GLProgram;
-    fn get_buffers(&self) -> &Vec<GLBuffer> {
+    fn get_buffers(&self) -> &Vec<BBuffer> {
         &self.buffers
     }
     fn get_names(&self) -> &Vec<String> {
@@ -344,7 +336,7 @@ impl VertexBuffer for GLVertexBuffer {
 
 pub struct GLVertexBufferBuilder {
     names: Vec<String>,
-    buffers: Vec<GLBuffer>,
+    buffers: Vec<BBuffer>,
 }
 
 impl GLVertexBufferBuilder {
@@ -354,12 +346,14 @@ impl GLVertexBufferBuilder {
             buffers: Vec::new(),
         }
     }
-    pub fn add_input(mut self, name: &str, input: InputBuffer) -> GLVertexBufferBuilder {
+}
+impl VertexBufferBuilder for GLVertexBufferBuilder {
+    fn add_input(mut self, name: &str, input: InputBuffer) -> GLVertexBufferBuilder {
         self.names.push(String::from(name));
-        self.buffers.push(GLBuffer::new(input));
+        self.buffers.push(Box::new(GLBuffer::new(input)));
         self
     }
-    pub fn build(self, program: &GLProgram) -> GLVertexBuffer {
+    fn build(self, program: &BProgram) -> BVertexBuffer {
         let mut vao: u32 = 0;
         unsafe {
             gl::GenVertexArrays(1, &mut vao);
@@ -381,7 +375,7 @@ impl GLVertexBufferBuilder {
                 gl::EnableVertexAttribArray(loc);
             }
         }
-        GLVertexBuffer::new(self.names, self.buffers, vao)
+        Box::new(GLVertexBuffer::new(self.names, self.buffers, vao))
     }
 }
 
@@ -432,7 +426,6 @@ impl GLTexture2D {
 }
 
 impl Texture2D for GLTexture2D {
-    type Bind = u32;
     fn get_bind(&self) -> u32 {
         self.bind
     }

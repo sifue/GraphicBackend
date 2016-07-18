@@ -3,25 +3,24 @@ use super::Event;
 
 use std::mem;
 
+pub type BProgram = Box<Program>;
+pub type BBuffer = Box<Buffer>;
+pub type BVertexBuffer = Box<VertexBuffer>;
+pub type BVertexBufferBuilder = Box<VertexBufferBuilder>;
+pub type BFrame = Box<Frame>;
+pub type BTexture2D = Box<Texture2D>;
+
 pub trait Facade {
-    type Frame: Frame;
-    type Program: Program;
     type VertexBufferBuilder;
-    type Texture2D: Texture2D;
     fn program(&self,
                vssrc: &str,
                fssrc: &str,
                gssrc: Option<&str>,
                out: &str)
-               -> Result<Self::Program, String>;
+               -> Result<BProgram, String>;
     fn vertex_buffer(&self) -> Self::VertexBufferBuilder;
-    fn frame(&self) -> Self::Frame;
-    fn texture2d(&self,
-                 format: ColorFormat,
-                 width: u32,
-                 height: u32,
-                 data: Vec<u8>)
-                 -> Self::Texture2D;
+    fn frame(&self) -> BFrame;
+    fn texture2d(&self, format: ColorFormat, width: u32, height: u32, data: Vec<u8>) -> BTexture2D;
 }
 
 macro_rules! impl_facade {
@@ -33,26 +32,23 @@ macro_rules! impl_facade {
         Texture2D => $tex2d:ident,
     }) => (
         impl Facade for $name {
-            type Frame = $frame;
-            type Program = $program;
             type VertexBufferBuilder = $vbb;
-            type Texture2D = $tex2d;
             fn program(&self,
                        vssrc: &str,
                        fssrc: &str,
                        gssrc: Option<&str>,
                        out: &str)
-                       -> Result<$program, String> {
-                $program::from_source(vssrc, fssrc, gssrc, out)
+                       -> Result<BProgram, String> {
+                Ok(Box::new(try!($program::from_source(vssrc, fssrc, gssrc, out))))
             }
             fn vertex_buffer(&self) -> $vbb {
                 $vbb::new()
             }
-            fn frame(&self) -> $frame {
-                $frame::new(self.$selfcontext.clone())
+            fn frame(&self) -> BFrame {
+                Box::new($frame::new(self.$selfcontext.clone()))
             }
-            fn texture2d(&self, format: ColorFormat, width: u32, height: u32, data: Vec<u8>) -> $tex2d {
-                $tex2d::new(format, width, height, data)
+            fn texture2d(&self, format: ColorFormat, width: u32, height: u32, data: Vec<u8>) -> BTexture2D {
+                Box::new($tex2d::new(format, width, height, data))
             }
         }
     );
@@ -64,28 +60,23 @@ pub trait Context {
 }
 
 pub trait Frame {
-    type Program;
-    type VertexBuffer;
     fn draw(&mut self,
-            program: &Self::Program,
+            program: &BProgram,
             draw_type: DrawType,
-            vb: &Self::VertexBuffer,
+            vb: &BVertexBuffer,
             uniforms: &Uniforms<u32>);
     fn clear_color(&self, r: f32, g: f32, b: f32, a: f32);
-    fn finish(self);
+    fn finish(self: Box<Self>);
 }
 
 pub trait Program {
-    type Bind;
-    type VertexBuffer: VertexBuffer;
-    fn draw(&self, draw_type: DrawType, vb: &Self::VertexBuffer, uniforms: &Uniforms<u32>);
-    fn get_bind(&self) -> Self::Bind;
+    fn draw(&self, draw_type: DrawType, vb: &BVertexBuffer, uniforms: &Uniforms<u32>);
+    fn get_bind(&self) -> u32;
 }
 
 pub trait Buffer {
-    type Bind;
     fn get_buffer(&self) -> &InputBuffer;
-    fn get_bind(&self) -> Self::Bind;
+    fn get_bind(&self) -> u32;
     fn elem_len(&self) -> usize {
         self.get_buffer().elem_len()
     }
@@ -95,18 +86,20 @@ pub trait Buffer {
 }
 
 pub trait VertexBuffer {
-    type Buffer: Buffer;
-    type Bind;
-    type Program: Program;
-    fn get_buffers(&self) -> &Vec<Self::Buffer>;
-    fn get_binds(&self) -> Vec<<<Self as VertexBuffer>::Buffer as Buffer>::Bind> {
+    fn get_buffers(&self) -> &Vec<BBuffer>;
+    fn get_binds(&self) -> Vec<u32> {
         self.get_buffers().iter().map(|b| b.get_bind()).collect()
     }
     fn get_names(&self) -> &Vec<String>;
-    fn get_bind(&self) -> Self::Bind;
+    fn get_bind(&self) -> u32;
     fn len(&self) -> usize {
         self.get_buffers()[0].len()
     }
+}
+
+pub trait VertexBufferBuilder {
+    fn add_input(mut self, name: &str, input: InputBuffer) -> Self;
+    fn build(self, program: &BProgram) -> BVertexBuffer;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -195,9 +188,8 @@ impl<T> Uniforms<T> {
 }
 
 pub trait Texture2D {
-    type Bind;
-    fn get_bind(&self) -> Self::Bind;
-    fn as_uniform(&self) -> Uniform<Self::Bind> {
+    fn get_bind(&self) -> u32;
+    fn as_uniform(&self) -> Uniform<u32> {
         Uniform::Texture2D(self.get_bind())
     }
 }
